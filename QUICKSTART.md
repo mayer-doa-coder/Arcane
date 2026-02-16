@@ -33,16 +33,58 @@ g++ lex.yy.c -o wizard_lexer.exe
 
 ### Run on Sample File
 ```bash
-# Output to file
-./lexer/wizard_lexer.exe input/sample.wiz output/output.txt
+# Output to file (from project root)
+lexer\wizard_lexer.exe input/sample.wiz output/output.txt
 
-# Output to console
-./lexer/wizard_lexer.exe input/sample.wiz
+# Output to console (from project root)
+lexer\wizard_lexer.exe input/sample.wiz
+
+# Or from lexer directory:
+cd lexer
+wizard_lexer.exe ../input/sample.wiz ../output/output.txt
 ```
+
+**Note**: Use backslashes `\` for Windows paths, not forward slashes `/`.
 
 ### Using Your Own .wiz File
 ```bash
-./lexer/wizard_lexer.exe your_file.wiz output.txt
+lexer\wizard_lexer.exe your_file.wiz output.txt
+```
+# How to Run the Bison Parser
+
+## Quick Reference
+
+### PowerShell (Recommended for Windows)
+```powershell
+# Run on simple_test.wiz
+Get-Content input\simple_test.wiz | .\parser\wizard_parser.exe
+
+# Run on any .wiz file
+Get-Content input\YOUR_FILE.wiz | .\parser\wizard_parser.exe
+
+# Run on parser_test.wiz (more complex example)
+Get-Content input\parser_test.wiz | .\parser\wizard_parser.exe
+```
+
+### Using Makefile
+```bash
+# Test with simple_test.wiz
+make test-simple
+
+# Test with sample.wiz (full sample)
+make test-parser
+
+# Rebuild parser if needed
+make parser
+
+# Clean and rebuild
+make clean
+make parser
+```
+
+### Command Prompt (CMD)
+```cmd
+type input\simple_test.wiz | parser\wizard_parser.exe
 ```
 
 ## Token Types Reference

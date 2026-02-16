@@ -8,6 +8,7 @@
 #define YY_FLEX_MAJOR_VERSION 2
 #define YY_FLEX_MINOR_VERSION 5
 
+#include <stdio.h>
 
 
 /* cfront 1.2 defines "c_plusplus" instead of "__cplusplus" */
@@ -21,7 +22,6 @@
 #ifdef __cplusplus
 
 #include <stdlib.h>
-class istream;
 #include <unistd.h>
 
 /* Use prototypes in function declarations. */
@@ -99,6 +99,7 @@ class istream;
 typedef struct yy_buffer_state *YY_BUFFER_STATE;
 
 extern int yyleng;
+extern FILE *yyin, *yyout;
 
 #define EOB_ACT_CONTINUE_SCAN 0
 #define EOB_ACT_END_OF_FILE 1
@@ -142,7 +143,7 @@ typedef unsigned int yy_size_t;
 
 struct yy_buffer_state
 	{
-	istream* yy_input_file;
+	FILE *yy_input_file;
 
 	char *yy_ch_buf;		/* input buffer */
 	char *yy_buf_pos;		/* current position in input buffer */
@@ -197,6 +198,7 @@ struct yy_buffer_state
 #define YY_BUFFER_EOF_PENDING 2
 	};
 
+static YY_BUFFER_STATE yy_current_buffer = 0;
 
 /* We provide macros for accessing buffer states in case in the
  * future we want to put the buffer states in a more general
@@ -205,6 +207,37 @@ struct yy_buffer_state
 #define YY_CURRENT_BUFFER yy_current_buffer
 
 
+/* yy_hold_char holds the character lost when yytext is formed. */
+static char yy_hold_char;
+
+static int yy_n_chars;		/* number of characters read into yy_ch_buf */
+
+
+int yyleng;
+
+/* Points to current character in buffer. */
+static char *yy_c_buf_p = (char *) 0;
+static int yy_init = 1;		/* whether we need to initialize */
+static int yy_start = 0;	/* start state number */
+
+/* Flag which is used to allow yywrap()'s to do buffer switches
+ * instead of setting up a fresh yyin.  A bit of a hack ...
+ */
+static int yy_did_buffer_switch_on_eof;
+
+void yyrestart YY_PROTO(( FILE *input_file ));
+
+void yy_switch_to_buffer YY_PROTO(( YY_BUFFER_STATE new_buffer ));
+void yy_load_buffer_state YY_PROTO(( void ));
+YY_BUFFER_STATE yy_create_buffer YY_PROTO(( FILE *file, int size ));
+void yy_delete_buffer YY_PROTO(( YY_BUFFER_STATE b ));
+void yy_init_buffer YY_PROTO(( YY_BUFFER_STATE b, FILE *file ));
+void yy_flush_buffer YY_PROTO(( YY_BUFFER_STATE b ));
+#define YY_FLUSH_BUFFER yy_flush_buffer( yy_current_buffer )
+
+YY_BUFFER_STATE yy_scan_buffer YY_PROTO(( char *base, yy_size_t size ));
+YY_BUFFER_STATE yy_scan_string YY_PROTO(( yyconst char *yy_str ));
+YY_BUFFER_STATE yy_scan_bytes YY_PROTO(( yyconst char *bytes, int len ));
 
 static void *yy_flex_alloc YY_PROTO(( yy_size_t ));
 static void *yy_flex_realloc YY_PROTO(( void *, yy_size_t ));
@@ -232,11 +265,15 @@ static void yy_flex_free YY_PROTO(( void * ));
 #define yywrap() 1
 #define YY_SKIP_YYWRAP
 typedef unsigned char YY_CHAR;
+FILE *yyin = (FILE *) 0, *yyout = (FILE *) 0;
+typedef int yy_state_type;
+extern char *yytext;
 #define yytext_ptr yytext
-#define YY_INTERACTIVE
 
-#include <FlexLexer.h>
-
+static yy_state_type yy_get_previous_state YY_PROTO(( void ));
+static yy_state_type yy_try_NUL_trans YY_PROTO(( yy_state_type current_state ));
+static int yy_get_next_buffer YY_PROTO(( void ));
+static void yy_fatal_error YY_PROTO(( yyconst char msg[] ));
 
 /* Done after the current pattern has been matched and before the
  * corresponding action - sets up yytext.
@@ -463,6 +500,9 @@ static yyconst short int yy_chk[340] =
       226,  226,  226,  226,  226,  226,  226,  226,  226
     } ;
 
+static yy_state_type yy_last_accepting_state;
+static char *yy_last_accepting_cpos;
+
 /* The intent behind this definition is that it'll catch
  * any uses of REJECT which flex missed.
  */
@@ -470,31 +510,31 @@ static yyconst short int yy_chk[340] =
 #define yymore() yymore_used_but_not_detected
 #define YY_MORE_ADJ 0
 #define YY_RESTORE_YY_MORE_OFFSET
-#line 1 "wizard.l"
+char *yytext;
+#line 1 "../lexer/wizard_parser.l"
 #define INITIAL 0
-#line 2 "wizard.l"
-/* Arcane Language Lexical Analyzer */
+#line 2 "../lexer/wizard_parser.l"
+/* Arcane Language Lexical Analyzer for Parser Integration */
 /* Wizard-inspired programming language */
 
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include "wizard.tab.h"  /* Bison-generated header with token definitions */
 
 /* Global variables */
 int line_number = 1;
 int comment_depth = 0;
 
-/* Token output helper */
-void print_token(const char* token_type, const char* lexeme) {
-    fprintf(yyout, "<%s, \"%s\", line:%d>\n", token_type, lexeme, line_number);
-}
+/* yylval is defined in Bison-generated code */
+extern YYSTYPE yylval;
 
 /* Flex options */
 /* State for multi-line comments */
 #define MULTILINE_COMMENT 1
 
 /* Regular expression definitions */
-#line 498 "lex.yy.cc"
+#line 538 "lex.yy.c"
 
 /* Macros after this point can all be overridden by user definitions in
  * section 1.
@@ -508,6 +548,9 @@ extern int yywrap YY_PROTO(( void ));
 #endif
 #endif
 
+#ifndef YY_NO_UNPUT
+static void yyunput YY_PROTO(( int c, char *buf_ptr ));
+#endif
 
 #ifndef yytext_ptr
 static void yy_flex_strncpy YY_PROTO(( char *, yyconst char *, int ));
@@ -518,6 +561,11 @@ static int yy_flex_strlen YY_PROTO(( yyconst char * ));
 #endif
 
 #ifndef YY_NO_INPUT
+#ifdef __cplusplus
+static int yyinput YY_PROTO(( void ));
+#else
+static int input YY_PROTO(( void ));
+#endif
 #endif
 
 #if YY_STACK_USED
@@ -563,7 +611,10 @@ YY_MALLOC_DECL
 /* Copy whatever the last rule matched to the standard output. */
 
 #ifndef ECHO
-#define ECHO LexerOutput( yytext, yyleng )
+/* This used to be an fputs(), but since the string might contain NUL's,
+ * we now use fwrite().
+ */
+#define ECHO (void) fwrite( yytext, yyleng, 1, yyout )
 #endif
 
 /* Gets input and stuffs it into "buf".  number of characters read, or YY_NULL,
@@ -571,7 +622,20 @@ YY_MALLOC_DECL
  */
 #ifndef YY_INPUT
 #define YY_INPUT(buf,result,max_size) \
-	if ( (result = LexerInput( (char *) buf, max_size )) < 0 ) \
+	if ( yy_current_buffer->yy_is_interactive ) \
+		{ \
+		int c = '*', n; \
+		for ( n = 0; n < max_size && \
+			     (c = getc( yyin )) != EOF && c != '\n'; ++n ) \
+			buf[n] = (char) c; \
+		if ( c == '\n' ) \
+			buf[n++] = (char) c; \
+		if ( c == EOF && ferror( yyin ) ) \
+			YY_FATAL_ERROR( "input in flex scanner failed" ); \
+		result = n; \
+		} \
+	else if ( ((result = fread( buf, 1, max_size, yyin )) == 0) \
+		  && ferror( yyin ) ) \
 		YY_FATAL_ERROR( "input in flex scanner failed" );
 #endif
 
@@ -590,14 +654,14 @@ YY_MALLOC_DECL
 
 /* Report a fatal error. */
 #ifndef YY_FATAL_ERROR
-#define YY_FATAL_ERROR(msg) LexerError( msg )
+#define YY_FATAL_ERROR(msg) yy_fatal_error( msg )
 #endif
 
 /* Default declaration of generated scanner - a define so the user can
  * easily add parameters.
  */
 #ifndef YY_DECL
-#define YY_DECL int yyFlexLexer::yylex()
+#define YY_DECL int yylex YY_PROTO(( void ))
 #endif
 
 /* Code executed at the beginning of each rule, after yytext and yyleng
@@ -621,11 +685,11 @@ YY_DECL
 	register char *yy_cp, *yy_bp;
 	register int yy_act;
 
-#line 36 "wizard.l"
+#line 34 "../lexer/wizard_parser.l"
 
 
     /* Multi-line comment handling */
-#line 629 "lex.yy.cc"
+#line 693 "lex.yy.c"
 
 	if ( yy_init )
 		{
@@ -639,10 +703,10 @@ YY_DECL
 			yy_start = 1;	/* first start state */
 
 		if ( ! yyin )
-			yyin = &cin;
+			yyin = stdin;
 
 		if ( ! yyout )
-			yyout = &cout;
+			yyout = stdout;
 
 		if ( ! yy_current_buffer )
 			yy_current_buffer =
@@ -710,17 +774,17 @@ do_action:	/* This label is used only to access EOF actions. */
 
 case 1:
 YY_RULE_SETUP
-#line 39 "wizard.l"
+#line 37 "../lexer/wizard_parser.l"
 { comment_depth = 1; BEGIN(MULTILINE_COMMENT); }
 	YY_BREAK
 case 2:
 YY_RULE_SETUP
-#line 40 "wizard.l"
+#line 38 "../lexer/wizard_parser.l"
 { comment_depth++; }
 	YY_BREAK
 case 3:
 YY_RULE_SETUP
-#line 41 "wizard.l"
+#line 39 "../lexer/wizard_parser.l"
 { 
                         comment_depth--; 
                         if (comment_depth == 0) {
@@ -730,454 +794,453 @@ YY_RULE_SETUP
 	YY_BREAK
 case 4:
 YY_RULE_SETUP
-#line 47 "wizard.l"
+#line 45 "../lexer/wizard_parser.l"
 { line_number++; }
 	YY_BREAK
 case 5:
 YY_RULE_SETUP
-#line 48 "wizard.l"
+#line 46 "../lexer/wizard_parser.l"
 { /* ignore comment content */ }
 	YY_BREAK
 /* Single-line comments */
 case 6:
 YY_RULE_SETUP
-#line 51 "wizard.l"
+#line 49 "../lexer/wizard_parser.l"
 { /* ignore single-line comments */ }
 	YY_BREAK
 /* Control flow keywords */
 case 7:
 YY_RULE_SETUP
-#line 54 "wizard.l"
-{ print_token("KEYWORD_SPELL", yytext); }
+#line 52 "../lexer/wizard_parser.l"
+{ return KEYWORD_SPELL; }
 	YY_BREAK
 case 8:
 YY_RULE_SETUP
-#line 55 "wizard.l"
-{ print_token("KEYWORD_RITUAL", yytext); }
+#line 53 "../lexer/wizard_parser.l"
+{ return KEYWORD_RITUAL; }
 	YY_BREAK
 case 9:
 YY_RULE_SETUP
-#line 56 "wizard.l"
-{ print_token("KEYWORD_CAST", yytext); }
+#line 54 "../lexer/wizard_parser.l"
+{ return KEYWORD_CAST; }
 	YY_BREAK
 case 10:
 YY_RULE_SETUP
-#line 57 "wizard.l"
-{ print_token("KEYWORD_IF", yytext); }
+#line 55 "../lexer/wizard_parser.l"
+{ return KEYWORD_IF; }
 	YY_BREAK
 case 11:
 YY_RULE_SETUP
-#line 58 "wizard.l"
-{ print_token("KEYWORD_ELSE", yytext); }
+#line 56 "../lexer/wizard_parser.l"
+{ return KEYWORD_ELSE; }
 	YY_BREAK
 case 12:
 YY_RULE_SETUP
-#line 59 "wizard.l"
-{ print_token("KEYWORD_ELSEIF", yytext); }
+#line 57 "../lexer/wizard_parser.l"
+{ return KEYWORD_ELSEIF; }
 	YY_BREAK
 case 13:
 YY_RULE_SETUP
-#line 60 "wizard.l"
-{ print_token("KEYWORD_WHILE", yytext); }
+#line 58 "../lexer/wizard_parser.l"
+{ return KEYWORD_WHILE; }
 	YY_BREAK
 case 14:
 YY_RULE_SETUP
-#line 61 "wizard.l"
-{ print_token("KEYWORD_FOR", yytext); }
+#line 59 "../lexer/wizard_parser.l"
+{ return KEYWORD_FOR; }
 	YY_BREAK
 case 15:
 YY_RULE_SETUP
-#line 62 "wizard.l"
-{ print_token("KEYWORD_REPEAT", yytext); }
+#line 60 "../lexer/wizard_parser.l"
+{ return KEYWORD_REPEAT; }
 	YY_BREAK
 case 16:
 YY_RULE_SETUP
-#line 63 "wizard.l"
-{ print_token("KEYWORD_UNTIL", yytext); }
+#line 61 "../lexer/wizard_parser.l"
+{ return KEYWORD_UNTIL; }
 	YY_BREAK
 case 17:
 YY_RULE_SETUP
-#line 64 "wizard.l"
-{ print_token("KEYWORD_BREAK", yytext); }
+#line 62 "../lexer/wizard_parser.l"
+{ return KEYWORD_BREAK; }
 	YY_BREAK
 case 18:
 YY_RULE_SETUP
-#line 65 "wizard.l"
-{ print_token("KEYWORD_CONTINUE", yytext); }
+#line 63 "../lexer/wizard_parser.l"
+{ return KEYWORD_CONTINUE; }
 	YY_BREAK
 case 19:
 YY_RULE_SETUP
-#line 66 "wizard.l"
-{ print_token("KEYWORD_RETURN", yytext); }
+#line 64 "../lexer/wizard_parser.l"
+{ return KEYWORD_RETURN; }
 	YY_BREAK
 /* Data type keywords */
 case 20:
 YY_RULE_SETUP
-#line 69 "wizard.l"
-{ print_token("KEYWORD_ESSENCE", yytext); }
+#line 67 "../lexer/wizard_parser.l"
+{ return KEYWORD_ESSENCE; }
 	YY_BREAK
 case 21:
 YY_RULE_SETUP
-#line 70 "wizard.l"
-{ print_token("KEYWORD_SPIRIT", yytext); }
+#line 68 "../lexer/wizard_parser.l"
+{ return KEYWORD_SPIRIT; }
 	YY_BREAK
 case 22:
 YY_RULE_SETUP
-#line 71 "wizard.l"
-{ print_token("KEYWORD_RUNE", yytext); }
+#line 69 "../lexer/wizard_parser.l"
+{ return KEYWORD_RUNE; }
 	YY_BREAK
 case 23:
 YY_RULE_SETUP
-#line 72 "wizard.l"
-{ print_token("KEYWORD_SCROLL", yytext); }
+#line 70 "../lexer/wizard_parser.l"
+{ return KEYWORD_SCROLL; }
 	YY_BREAK
 case 24:
 YY_RULE_SETUP
-#line 73 "wizard.l"
-{ print_token("KEYWORD_ORACLE", yytext); }
+#line 71 "../lexer/wizard_parser.l"
+{ return KEYWORD_ORACLE; }
 	YY_BREAK
 case 25:
 YY_RULE_SETUP
-#line 74 "wizard.l"
-{ print_token("KEYWORD_VOID", yytext); }
+#line 72 "../lexer/wizard_parser.l"
+{ return KEYWORD_VOID; }
 	YY_BREAK
 case 26:
 YY_RULE_SETUP
-#line 75 "wizard.l"
-{ print_token("KEYWORD_ARRAY", yytext); }
+#line 73 "../lexer/wizard_parser.l"
+{ return KEYWORD_ARRAY; }
 	YY_BREAK
 case 27:
 YY_RULE_SETUP
-#line 76 "wizard.l"
-{ print_token("KEYWORD_GRIMOIRE", yytext); }
+#line 74 "../lexer/wizard_parser.l"
+{ return KEYWORD_GRIMOIRE; }
 	YY_BREAK
 /* Boolean and null literals */
 case 28:
 YY_RULE_SETUP
-#line 79 "wizard.l"
-{ print_token("KEYWORD_TRUE", yytext); }
+#line 77 "../lexer/wizard_parser.l"
+{ return KEYWORD_TRUE; }
 	YY_BREAK
 case 29:
 YY_RULE_SETUP
-#line 80 "wizard.l"
-{ print_token("KEYWORD_FALSE", yytext); }
+#line 78 "../lexer/wizard_parser.l"
+{ return KEYWORD_FALSE; }
 	YY_BREAK
 case 30:
 YY_RULE_SETUP
-#line 81 "wizard.l"
-{ print_token("KEYWORD_NULL", yytext); }
+#line 79 "../lexer/wizard_parser.l"
+{ return KEYWORD_NULL; }
 	YY_BREAK
 /* I/O keywords */
 case 31:
 YY_RULE_SETUP
-#line 84 "wizard.l"
-{ print_token("KEYWORD_SUMMON", yytext); }
+#line 82 "../lexer/wizard_parser.l"
+{ return KEYWORD_SUMMON; }
 	YY_BREAK
 case 32:
 YY_RULE_SETUP
-#line 85 "wizard.l"
-{ print_token("KEYWORD_MANIFEST", yytext); }
+#line 83 "../lexer/wizard_parser.l"
+{ return KEYWORD_MANIFEST; }
 	YY_BREAK
 case 33:
 YY_RULE_SETUP
-#line 86 "wizard.l"
-{ print_token("KEYWORD_SCRY", yytext); }
+#line 84 "../lexer/wizard_parser.l"
+{ return KEYWORD_SCRY; }
 	YY_BREAK
 /* Other keywords */
 case 34:
 YY_RULE_SETUP
-#line 89 "wizard.l"
-{ print_token("KEYWORD_CONST", yytext); }
+#line 87 "../lexer/wizard_parser.l"
+{ return KEYWORD_CONST; }
 	YY_BREAK
 case 35:
 YY_RULE_SETUP
-#line 90 "wizard.l"
-{ print_token("KEYWORD_LET", yytext); }
+#line 88 "../lexer/wizard_parser.l"
+{ return KEYWORD_LET; }
 	YY_BREAK
 case 36:
 YY_RULE_SETUP
-#line 91 "wizard.l"
-{ print_token("KEYWORD_ENCHANT", yytext); }
+#line 89 "../lexer/wizard_parser.l"
+{ return KEYWORD_ENCHANT; }
 	YY_BREAK
 case 37:
 YY_RULE_SETUP
-#line 92 "wizard.l"
-{ print_token("KEYWORD_BIND", yytext); }
+#line 90 "../lexer/wizard_parser.l"
+{ return KEYWORD_BIND; }
 	YY_BREAK
 case 38:
 YY_RULE_SETUP
-#line 93 "wizard.l"
-{ print_token("KEYWORD_TRANSMUTE", yytext); }
+#line 91 "../lexer/wizard_parser.l"
+{ return KEYWORD_TRANSMUTE; }
 	YY_BREAK
 /* Multi-character operators - must come before single-character */
 case 39:
 YY_RULE_SETUP
-#line 96 "wizard.l"
-{ print_token("OP_POWER", yytext); }
+#line 94 "../lexer/wizard_parser.l"
+{ return OP_POWER; }
 	YY_BREAK
 case 40:
 YY_RULE_SETUP
-#line 97 "wizard.l"
-{ print_token("OP_INCREMENT", yytext); }
+#line 95 "../lexer/wizard_parser.l"
+{ return OP_INCREMENT; }
 	YY_BREAK
 case 41:
 YY_RULE_SETUP
-#line 98 "wizard.l"
-{ print_token("OP_DECREMENT", yytext); }
+#line 96 "../lexer/wizard_parser.l"
+{ return OP_DECREMENT; }
 	YY_BREAK
 case 42:
 YY_RULE_SETUP
-#line 99 "wizard.l"
-{ print_token("OP_EQUAL", yytext); }
+#line 97 "../lexer/wizard_parser.l"
+{ return OP_EQUAL; }
 	YY_BREAK
 case 43:
 YY_RULE_SETUP
-#line 100 "wizard.l"
-{ print_token("OP_NOT_EQUAL", yytext); }
+#line 98 "../lexer/wizard_parser.l"
+{ return OP_NOT_EQUAL; }
 	YY_BREAK
 case 44:
 YY_RULE_SETUP
-#line 101 "wizard.l"
-{ print_token("OP_GREATER_EQUAL", yytext); }
+#line 99 "../lexer/wizard_parser.l"
+{ return OP_GREATER_EQUAL; }
 	YY_BREAK
 case 45:
 YY_RULE_SETUP
-#line 102 "wizard.l"
-{ print_token("OP_LESS_EQUAL", yytext); }
+#line 100 "../lexer/wizard_parser.l"
+{ return OP_LESS_EQUAL; }
 	YY_BREAK
 case 46:
 YY_RULE_SETUP
-#line 103 "wizard.l"
-{ print_token("OP_AND", yytext); }
+#line 101 "../lexer/wizard_parser.l"
+{ return OP_AND; }
 	YY_BREAK
 case 47:
 YY_RULE_SETUP
-#line 104 "wizard.l"
-{ print_token("OP_OR", yytext); }
+#line 102 "../lexer/wizard_parser.l"
+{ return OP_OR; }
 	YY_BREAK
 case 48:
 YY_RULE_SETUP
-#line 105 "wizard.l"
-{ print_token("OP_PLUS_ASSIGN", yytext); }
+#line 103 "../lexer/wizard_parser.l"
+{ return OP_PLUS_ASSIGN; }
 	YY_BREAK
 case 49:
 YY_RULE_SETUP
-#line 106 "wizard.l"
-{ print_token("OP_MINUS_ASSIGN", yytext); }
+#line 104 "../lexer/wizard_parser.l"
+{ return OP_MINUS_ASSIGN; }
 	YY_BREAK
 case 50:
 YY_RULE_SETUP
-#line 107 "wizard.l"
-{ print_token("OP_MULTIPLY_ASSIGN", yytext); }
+#line 105 "../lexer/wizard_parser.l"
+{ return OP_MULTIPLY_ASSIGN; }
 	YY_BREAK
 case 51:
 YY_RULE_SETUP
-#line 108 "wizard.l"
-{ print_token("OP_DIVIDE_ASSIGN", yytext); }
+#line 106 "../lexer/wizard_parser.l"
+{ return OP_DIVIDE_ASSIGN; }
 	YY_BREAK
 case 52:
 YY_RULE_SETUP
-#line 109 "wizard.l"
-{ print_token("OP_MODULUS_ASSIGN", yytext); }
+#line 107 "../lexer/wizard_parser.l"
+{ return OP_MODULUS_ASSIGN; }
 	YY_BREAK
 case 53:
 YY_RULE_SETUP
-#line 110 "wizard.l"
-{ print_token("OP_LEFT_SHIFT", yytext); }
+#line 108 "../lexer/wizard_parser.l"
+{ return OP_LEFT_SHIFT; }
 	YY_BREAK
 case 54:
 YY_RULE_SETUP
-#line 111 "wizard.l"
-{ print_token("OP_RIGHT_SHIFT", yytext); }
+#line 109 "../lexer/wizard_parser.l"
+{ return OP_RIGHT_SHIFT; }
 	YY_BREAK
 case 55:
 YY_RULE_SETUP
-#line 112 "wizard.l"
-{ print_token("DELIM_ARROW", yytext); }
+#line 110 "../lexer/wizard_parser.l"
+{ return DELIM_ARROW; }
 	YY_BREAK
 /* Single-character operators */
 case 56:
 YY_RULE_SETUP
-#line 115 "wizard.l"
-{ print_token("OP_PLUS", yytext); }
+#line 113 "../lexer/wizard_parser.l"
+{ return OP_PLUS; }
 	YY_BREAK
 case 57:
 YY_RULE_SETUP
-#line 116 "wizard.l"
-{ print_token("OP_MINUS", yytext); }
+#line 114 "../lexer/wizard_parser.l"
+{ return OP_MINUS; }
 	YY_BREAK
 case 58:
 YY_RULE_SETUP
-#line 117 "wizard.l"
-{ print_token("OP_MULTIPLY", yytext); }
+#line 115 "../lexer/wizard_parser.l"
+{ return OP_MULTIPLY; }
 	YY_BREAK
 case 59:
 YY_RULE_SETUP
-#line 118 "wizard.l"
-{ print_token("OP_DIVIDE", yytext); }
+#line 116 "../lexer/wizard_parser.l"
+{ return OP_DIVIDE; }
 	YY_BREAK
 case 60:
 YY_RULE_SETUP
-#line 119 "wizard.l"
-{ print_token("OP_MODULUS", yytext); }
+#line 117 "../lexer/wizard_parser.l"
+{ return OP_MODULUS; }
 	YY_BREAK
 case 61:
 YY_RULE_SETUP
-#line 120 "wizard.l"
-{ print_token("OP_GREATER", yytext); }
+#line 118 "../lexer/wizard_parser.l"
+{ return OP_GREATER; }
 	YY_BREAK
 case 62:
 YY_RULE_SETUP
-#line 121 "wizard.l"
-{ print_token("OP_LESS", yytext); }
+#line 119 "../lexer/wizard_parser.l"
+{ return OP_LESS; }
 	YY_BREAK
 case 63:
 YY_RULE_SETUP
-#line 122 "wizard.l"
-{ print_token("OP_NOT", yytext); }
+#line 120 "../lexer/wizard_parser.l"
+{ return OP_NOT; }
 	YY_BREAK
 case 64:
 YY_RULE_SETUP
-#line 123 "wizard.l"
-{ print_token("OP_ASSIGN", yytext); }
+#line 121 "../lexer/wizard_parser.l"
+{ return OP_ASSIGN; }
 	YY_BREAK
 case 65:
 YY_RULE_SETUP
-#line 124 "wizard.l"
-{ print_token("OP_BITWISE_AND", yytext); }
+#line 122 "../lexer/wizard_parser.l"
+{ return OP_BITWISE_AND; }
 	YY_BREAK
 case 66:
 YY_RULE_SETUP
-#line 125 "wizard.l"
-{ print_token("OP_BITWISE_OR", yytext); }
+#line 123 "../lexer/wizard_parser.l"
+{ return OP_BITWISE_OR; }
 	YY_BREAK
 case 67:
 YY_RULE_SETUP
-#line 126 "wizard.l"
-{ print_token("OP_BITWISE_XOR", yytext); }
+#line 124 "../lexer/wizard_parser.l"
+{ return OP_BITWISE_XOR; }
 	YY_BREAK
 case 68:
 YY_RULE_SETUP
-#line 127 "wizard.l"
-{ print_token("OP_BITWISE_NOT", yytext); }
+#line 125 "../lexer/wizard_parser.l"
+{ return OP_BITWISE_NOT; }
 	YY_BREAK
 /* Delimiters */
 case 69:
 YY_RULE_SETUP
-#line 130 "wizard.l"
-{ print_token("DELIM_LPAREN", yytext); }
+#line 128 "../lexer/wizard_parser.l"
+{ return DELIM_LPAREN; }
 	YY_BREAK
 case 70:
 YY_RULE_SETUP
-#line 131 "wizard.l"
-{ print_token("DELIM_RPAREN", yytext); }
+#line 129 "../lexer/wizard_parser.l"
+{ return DELIM_RPAREN; }
 	YY_BREAK
 case 71:
 YY_RULE_SETUP
-#line 132 "wizard.l"
-{ print_token("DELIM_LBRACE", yytext); }
+#line 130 "../lexer/wizard_parser.l"
+{ return DELIM_LBRACE; }
 	YY_BREAK
 case 72:
 YY_RULE_SETUP
-#line 133 "wizard.l"
-{ print_token("DELIM_RBRACE", yytext); }
+#line 131 "../lexer/wizard_parser.l"
+{ return DELIM_RBRACE; }
 	YY_BREAK
 case 73:
 YY_RULE_SETUP
-#line 134 "wizard.l"
-{ print_token("DELIM_LBRACKET", yytext); }
+#line 132 "../lexer/wizard_parser.l"
+{ return DELIM_LBRACKET; }
 	YY_BREAK
 case 74:
 YY_RULE_SETUP
-#line 135 "wizard.l"
-{ print_token("DELIM_RBRACKET", yytext); }
+#line 133 "../lexer/wizard_parser.l"
+{ return DELIM_RBRACKET; }
 	YY_BREAK
 case 75:
 YY_RULE_SETUP
-#line 136 "wizard.l"
-{ print_token("DELIM_SEMICOLON", yytext); }
+#line 134 "../lexer/wizard_parser.l"
+{ return DELIM_SEMICOLON; }
 	YY_BREAK
 case 76:
 YY_RULE_SETUP
-#line 137 "wizard.l"
-{ print_token("DELIM_COMMA", yytext); }
+#line 135 "../lexer/wizard_parser.l"
+{ return DELIM_COMMA; }
 	YY_BREAK
 case 77:
 YY_RULE_SETUP
-#line 138 "wizard.l"
-{ print_token("DELIM_DOT", yytext); }
+#line 136 "../lexer/wizard_parser.l"
+{ return DELIM_DOT; }
 	YY_BREAK
 case 78:
 YY_RULE_SETUP
-#line 139 "wizard.l"
-{ print_token("DELIM_COLON", yytext); }
+#line 137 "../lexer/wizard_parser.l"
+{ return DELIM_COLON; }
 	YY_BREAK
 /* Literals */
 case 79:
 YY_RULE_SETUP
-#line 142 "wizard.l"
-{ print_token("INTEGER_LITERAL", yytext); }
+#line 140 "../lexer/wizard_parser.l"
+{ yylval.integer = (int)strtol(yytext, NULL, 16); return INTEGER_LITERAL; }
 	YY_BREAK
 case 80:
 YY_RULE_SETUP
-#line 143 "wizard.l"
-{ print_token("INTEGER_LITERAL", yytext); }
+#line 141 "../lexer/wizard_parser.l"
+{ yylval.integer = (int)strtol(yytext, NULL, 8); return INTEGER_LITERAL; }
 	YY_BREAK
 case 81:
 YY_RULE_SETUP
-#line 144 "wizard.l"
-{ print_token("FLOAT_LITERAL", yytext); }
+#line 142 "../lexer/wizard_parser.l"
+{ yylval.floating = atof(yytext); return FLOAT_LITERAL; }
 	YY_BREAK
 case 82:
 YY_RULE_SETUP
-#line 145 "wizard.l"
-{ print_token("INTEGER_LITERAL", yytext); }
+#line 143 "../lexer/wizard_parser.l"
+{ yylval.integer = atoi(yytext); return INTEGER_LITERAL; }
 	YY_BREAK
 /* String literal with escape sequences */
 case 83:
 YY_RULE_SETUP
-#line 148 "wizard.l"
-{ print_token("STRING_LITERAL", yytext); }
+#line 146 "../lexer/wizard_parser.l"
+{ yylval.string = strdup(yytext); return STRING_LITERAL; }
 	YY_BREAK
 /* Character literal with escape sequences */
 case 84:
 YY_RULE_SETUP
-#line 151 "wizard.l"
-{ print_token("CHAR_LITERAL", yytext); }
+#line 149 "../lexer/wizard_parser.l"
+{ yylval.string = strdup(yytext); return CHAR_LITERAL; }
 	YY_BREAK
 /* Identifiers - must come after keywords */
 case 85:
 YY_RULE_SETUP
-#line 154 "wizard.l"
-{ print_token("IDENTIFIER", yytext); }
+#line 152 "../lexer/wizard_parser.l"
+{ yylval.string = strdup(yytext); return IDENTIFIER; }
 	YY_BREAK
 /* Whitespace */
 case 86:
 YY_RULE_SETUP
-#line 157 "wizard.l"
+#line 155 "../lexer/wizard_parser.l"
 { /* ignore whitespace */ }
 	YY_BREAK
 case 87:
 YY_RULE_SETUP
-#line 158 "wizard.l"
+#line 156 "../lexer/wizard_parser.l"
 { line_number++; }
 	YY_BREAK
 /* Unrecognized characters */
 case 88:
 YY_RULE_SETUP
-#line 161 "wizard.l"
+#line 159 "../lexer/wizard_parser.l"
 { 
                         fprintf(stderr, "Error: Unrecognized character '%s' at line %d\n", 
                                 yytext, line_number);
-                        print_token("UNKNOWN", yytext);
                     }
 	YY_BREAK
 case 89:
 YY_RULE_SETUP
-#line 167 "wizard.l"
+#line 164 "../lexer/wizard_parser.l"
 ECHO;
 	YY_BREAK
-#line 1181 "lex.yy.cc"
+#line 1244 "lex.yy.c"
 case YY_STATE_EOF(INITIAL):
 case YY_STATE_EOF(MULTILINE_COMMENT):
 	yyterminate();
@@ -1311,87 +1374,6 @@ case YY_STATE_EOF(MULTILINE_COMMENT):
 		} /* end of scanning one token */
 	} /* end of yylex */
 
-yyFlexLexer::yyFlexLexer( istream* arg_yyin, ostream* arg_yyout )
-	{
-	yyin = arg_yyin;
-	yyout = arg_yyout;
-	yy_c_buf_p = 0;
-	yy_init = 1;
-	yy_start = 0;
-	yy_flex_debug = 0;
-	yylineno = 1;	// this will only get updated if %option yylineno
-
-	yy_did_buffer_switch_on_eof = 0;
-
-	yy_looking_for_trail_begin = 0;
-	yy_more_flag = 0;
-	yy_more_len = 0;
-	yy_more_offset = yy_prev_more_offset = 0;
-
-	yy_start_stack_ptr = yy_start_stack_depth = 0;
-	yy_start_stack = 0;
-
-	yy_current_buffer = 0;
-
-#ifdef YY_USES_REJECT
-	yy_state_buf = new yy_state_type[YY_BUF_SIZE + 2];
-#else
-	yy_state_buf = 0;
-#endif
-	}
-
-yyFlexLexer::~yyFlexLexer()
-	{
-	delete yy_state_buf;
-	yy_delete_buffer( yy_current_buffer );
-	}
-
-void yyFlexLexer::switch_streams( istream* new_in, ostream* new_out )
-	{
-	if ( new_in )
-		{
-		yy_delete_buffer( yy_current_buffer );
-		yy_switch_to_buffer( yy_create_buffer( new_in, YY_BUF_SIZE ) );
-		}
-
-	if ( new_out )
-		yyout = new_out;
-	}
-
-#ifdef YY_INTERACTIVE
-int yyFlexLexer::LexerInput( char* buf, int /* max_size */ )
-#else
-int yyFlexLexer::LexerInput( char* buf, int max_size )
-#endif
-	{
-	if ( yyin->eof() || yyin->fail() )
-		return 0;
-
-#ifdef YY_INTERACTIVE
-	yyin->get( buf[0] );
-
-	if ( yyin->eof() )
-		return 0;
-
-	if ( yyin->bad() )
-		return -1;
-
-	return 1;
-
-#else
-	(void) yyin->read( buf, max_size );
-
-	if ( yyin->bad() )
-		return -1;
-	else
-		return yyin->gcount();
-#endif
-	}
-
-void yyFlexLexer::LexerOutput( const char* buf, int size )
-	{
-	(void) yyout->write( buf, size );
-	}
 
 /* yy_get_next_buffer - try to read in a new buffer
  *
@@ -1401,7 +1383,7 @@ void yyFlexLexer::LexerOutput( const char* buf, int size )
  *	EOB_ACT_END_OF_FILE - end of file
  */
 
-int yyFlexLexer::yy_get_next_buffer()
+static int yy_get_next_buffer()
 	{
 	register char *dest = yy_current_buffer->yy_ch_buf;
 	register char *source = yytext_ptr;
@@ -1533,7 +1515,7 @@ int yyFlexLexer::yy_get_next_buffer()
 
 /* yy_get_previous_state - get the state just before the EOB char was reached */
 
-yy_state_type yyFlexLexer::yy_get_previous_state()
+static yy_state_type yy_get_previous_state()
 	{
 	register yy_state_type yy_current_state;
 	register char *yy_cp;
@@ -1567,7 +1549,12 @@ yy_state_type yyFlexLexer::yy_get_previous_state()
  *	next_state = yy_try_NUL_trans( current_state );
  */
 
-yy_state_type yyFlexLexer::yy_try_NUL_trans( yy_state_type yy_current_state )
+#ifdef YY_USE_PROTOS
+static yy_state_type yy_try_NUL_trans( yy_state_type yy_current_state )
+#else
+static yy_state_type yy_try_NUL_trans( yy_current_state )
+yy_state_type yy_current_state;
+#endif
 	{
 	register int yy_is_jam;
 	register char *yy_cp = yy_c_buf_p;
@@ -1591,7 +1578,14 @@ yy_state_type yyFlexLexer::yy_try_NUL_trans( yy_state_type yy_current_state )
 	}
 
 
-void yyFlexLexer::yyunput( int c, register char* yy_bp )
+#ifndef YY_NO_UNPUT
+#ifdef YY_USE_PROTOS
+static void yyunput( int c, register char *yy_bp )
+#else
+static void yyunput( c, yy_bp )
+int c;
+register char *yy_bp;
+#endif
 	{
 	register char *yy_cp = yy_c_buf_p;
 
@@ -1626,9 +1620,14 @@ void yyFlexLexer::yyunput( int c, register char* yy_bp )
 	yy_hold_char = *yy_cp;
 	yy_c_buf_p = yy_cp;
 	}
+#endif	/* ifndef YY_NO_UNPUT */
 
 
-int yyFlexLexer::yyinput()
+#ifdef __cplusplus
+static int yyinput()
+#else
+static int input()
+#endif
 	{
 	int c;
 
@@ -1697,7 +1696,12 @@ int yyFlexLexer::yyinput()
 	}
 
 
-void yyFlexLexer::yyrestart( istream* input_file )
+#ifdef YY_USE_PROTOS
+void yyrestart( FILE *input_file )
+#else
+void yyrestart( input_file )
+FILE *input_file;
+#endif
 	{
 	if ( ! yy_current_buffer )
 		yy_current_buffer = yy_create_buffer( yyin, YY_BUF_SIZE );
@@ -1707,7 +1711,12 @@ void yyFlexLexer::yyrestart( istream* input_file )
 	}
 
 
-void yyFlexLexer::yy_switch_to_buffer( YY_BUFFER_STATE new_buffer )
+#ifdef YY_USE_PROTOS
+void yy_switch_to_buffer( YY_BUFFER_STATE new_buffer )
+#else
+void yy_switch_to_buffer( new_buffer )
+YY_BUFFER_STATE new_buffer;
+#endif
 	{
 	if ( yy_current_buffer == new_buffer )
 		return;
@@ -1732,7 +1741,11 @@ void yyFlexLexer::yy_switch_to_buffer( YY_BUFFER_STATE new_buffer )
 	}
 
 
-void yyFlexLexer::yy_load_buffer_state()
+#ifdef YY_USE_PROTOS
+void yy_load_buffer_state( void )
+#else
+void yy_load_buffer_state()
+#endif
 	{
 	yy_n_chars = yy_current_buffer->yy_n_chars;
 	yytext_ptr = yy_c_buf_p = yy_current_buffer->yy_buf_pos;
@@ -1741,7 +1754,13 @@ void yyFlexLexer::yy_load_buffer_state()
 	}
 
 
-YY_BUFFER_STATE yyFlexLexer::yy_create_buffer( istream* file, int size )
+#ifdef YY_USE_PROTOS
+YY_BUFFER_STATE yy_create_buffer( FILE *file, int size )
+#else
+YY_BUFFER_STATE yy_create_buffer( file, size )
+FILE *file;
+int size;
+#endif
 	{
 	YY_BUFFER_STATE b;
 
@@ -1766,7 +1785,12 @@ YY_BUFFER_STATE yyFlexLexer::yy_create_buffer( istream* file, int size )
 	}
 
 
-void yyFlexLexer::yy_delete_buffer( YY_BUFFER_STATE b )
+#ifdef YY_USE_PROTOS
+void yy_delete_buffer( YY_BUFFER_STATE b )
+#else
+void yy_delete_buffer( b )
+YY_BUFFER_STATE b;
+#endif
 	{
 	if ( ! b )
 		return;
@@ -1781,8 +1805,20 @@ void yyFlexLexer::yy_delete_buffer( YY_BUFFER_STATE b )
 	}
 
 
-extern "C" int isatty YY_PROTO(( int ));
-void yyFlexLexer::yy_init_buffer( YY_BUFFER_STATE b, istream* file )
+#ifndef YY_ALWAYS_INTERACTIVE
+#ifndef YY_NEVER_INTERACTIVE
+extern int isatty YY_PROTO(( int ));
+#endif
+#endif
+
+#ifdef YY_USE_PROTOS
+void yy_init_buffer( YY_BUFFER_STATE b, FILE *file )
+#else
+void yy_init_buffer( b, file )
+YY_BUFFER_STATE b;
+FILE *file;
+#endif
+
 
 	{
 	yy_flush_buffer( b );
@@ -1790,11 +1826,25 @@ void yyFlexLexer::yy_init_buffer( YY_BUFFER_STATE b, istream* file )
 	b->yy_input_file = file;
 	b->yy_fill_buffer = 1;
 
+#if YY_ALWAYS_INTERACTIVE
+	b->yy_is_interactive = 1;
+#else
+#if YY_NEVER_INTERACTIVE
 	b->yy_is_interactive = 0;
+#else
+	b->yy_is_interactive = file ? (isatty( fileno(file) ) > 0) : 0;
+#endif
+#endif
 	}
 
 
-void yyFlexLexer::yy_flush_buffer( YY_BUFFER_STATE b )
+#ifdef YY_USE_PROTOS
+void yy_flush_buffer( YY_BUFFER_STATE b )
+#else
+void yy_flush_buffer( b )
+YY_BUFFER_STATE b;
+#endif
+
 	{
 	if ( ! b )
 		return;
@@ -1819,19 +1869,106 @@ void yyFlexLexer::yy_flush_buffer( YY_BUFFER_STATE b )
 
 
 #ifndef YY_NO_SCAN_BUFFER
+#ifdef YY_USE_PROTOS
+YY_BUFFER_STATE yy_scan_buffer( char *base, yy_size_t size )
+#else
+YY_BUFFER_STATE yy_scan_buffer( base, size )
+char *base;
+yy_size_t size;
+#endif
+	{
+	YY_BUFFER_STATE b;
+
+	if ( size < 2 ||
+	     base[size-2] != YY_END_OF_BUFFER_CHAR ||
+	     base[size-1] != YY_END_OF_BUFFER_CHAR )
+		/* They forgot to leave room for the EOB's. */
+		return 0;
+
+	b = (YY_BUFFER_STATE) yy_flex_alloc( sizeof( struct yy_buffer_state ) );
+	if ( ! b )
+		YY_FATAL_ERROR( "out of dynamic memory in yy_scan_buffer()" );
+
+	b->yy_buf_size = size - 2;	/* "- 2" to take care of EOB's */
+	b->yy_buf_pos = b->yy_ch_buf = base;
+	b->yy_is_our_buffer = 0;
+	b->yy_input_file = 0;
+	b->yy_n_chars = b->yy_buf_size;
+	b->yy_is_interactive = 0;
+	b->yy_at_bol = 1;
+	b->yy_fill_buffer = 0;
+	b->yy_buffer_status = YY_BUFFER_NEW;
+
+	yy_switch_to_buffer( b );
+
+	return b;
+	}
 #endif
 
 
 #ifndef YY_NO_SCAN_STRING
+#ifdef YY_USE_PROTOS
+YY_BUFFER_STATE yy_scan_string( yyconst char *yy_str )
+#else
+YY_BUFFER_STATE yy_scan_string( yy_str )
+yyconst char *yy_str;
+#endif
+	{
+	int len;
+	for ( len = 0; yy_str[len]; ++len )
+		;
+
+	return yy_scan_bytes( yy_str, len );
+	}
 #endif
 
 
 #ifndef YY_NO_SCAN_BYTES
+#ifdef YY_USE_PROTOS
+YY_BUFFER_STATE yy_scan_bytes( yyconst char *bytes, int len )
+#else
+YY_BUFFER_STATE yy_scan_bytes( bytes, len )
+yyconst char *bytes;
+int len;
+#endif
+	{
+	YY_BUFFER_STATE b;
+	char *buf;
+	yy_size_t n;
+	int i;
+
+	/* Get memory for full buffer, including space for trailing EOB's. */
+	n = len + 2;
+	buf = (char *) yy_flex_alloc( n );
+	if ( ! buf )
+		YY_FATAL_ERROR( "out of dynamic memory in yy_scan_bytes()" );
+
+	for ( i = 0; i < len; ++i )
+		buf[i] = bytes[i];
+
+	buf[len] = buf[len+1] = YY_END_OF_BUFFER_CHAR;
+
+	b = yy_scan_buffer( buf, n );
+	if ( ! b )
+		YY_FATAL_ERROR( "bad buffer in yy_scan_bytes()" );
+
+	/* It's okay to grow etc. this buffer, and we should throw it
+	 * away when we're done.
+	 */
+	b->yy_is_our_buffer = 1;
+
+	return b;
+	}
 #endif
 
 
 #ifndef YY_NO_PUSH_STATE
-void yyFlexLexer::yy_push_state( int new_state )
+#ifdef YY_USE_PROTOS
+static void yy_push_state( int new_state )
+#else
+static void yy_push_state( new_state )
+int new_state;
+#endif
 	{
 	if ( yy_start_stack_ptr >= yy_start_stack_depth )
 		{
@@ -1860,7 +1997,7 @@ void yyFlexLexer::yy_push_state( int new_state )
 
 
 #ifndef YY_NO_POP_STATE
-void yyFlexLexer::yy_pop_state()
+static void yy_pop_state()
 	{
 	if ( --yy_start_stack_ptr < 0 )
 		YY_FATAL_ERROR( "start-condition stack underflow" );
@@ -1871,7 +2008,7 @@ void yyFlexLexer::yy_pop_state()
 
 
 #ifndef YY_NO_TOP_STATE
-int yyFlexLexer::yy_top_state()
+static int yy_top_state()
 	{
 	return yy_start_stack[yy_start_stack_ptr - 1];
 	}
@@ -1881,12 +2018,17 @@ int yyFlexLexer::yy_top_state()
 #define YY_EXIT_FAILURE 2
 #endif
 
-
-void yyFlexLexer::LexerError( yyconst char msg[] )
+#ifdef YY_USE_PROTOS
+static void yy_fatal_error( yyconst char msg[] )
+#else
+static void yy_fatal_error( msg )
+char msg[];
+#endif
 	{
-	cerr << msg << '\n';
+	(void) fprintf( stderr, "%s\n", msg );
 	exit( YY_EXIT_FAILURE );
 	}
+
 
 
 /* Redefine yyless() so it works in section 3 code. */
@@ -1985,53 +2127,7 @@ int main()
 	return 0;
 	}
 #endif
-#line 167 "wizard.l"
+#line 164 "../lexer/wizard_parser.l"
 
 
-/* User code section */
-
-int main(int argc, char** argv) {
-    /* Default to stdin/stdout */
-    FILE* input_file = stdin;
-    FILE* output_file = stdout;
-    
-    /* Handle command-line arguments */
-    if (argc > 1) {
-        input_file = fopen(argv[1], "r");
-        if (!input_file) {
-            fprintf(stderr, "Error: Cannot open input file '%s'\n", argv[1]);
-            return 1;
-        }
-        yyin = input_file;
-    }
-    
-    if (argc > 2) {
-        output_file = fopen(argv[2], "w");
-        if (!output_file) {
-            fprintf(stderr, "Error: Cannot open output file '%s'\n", argv[2]);
-            if (input_file != stdin) fclose(input_file);
-            return 1;
-        }
-        yyout = output_file;
-    }
-    
-    /* Print header */
-    fprintf(yyout, "=== Arcane Lexical Analysis ===\n");
-    fprintf(yyout, "Tokenizing input...\n\n");
-    
-    /* Tokenize the input */
-    while (yylex()) {
-        /* Token output is handled in the rules section */
-    }
-    
-    /* Print footer */
-    fprintf(yyout, "\n=== Tokenization Complete ===\n");
-    fprintf(yyout, "Total lines processed: %d\n", line_number);
-    
-    /* Cleanup */
-    if (input_file != stdin) fclose(input_file);
-    if (output_file != stdout) fclose(output_file);
-    
-    return 0;
-}
-
+/* No main function needed - Bison provides it */

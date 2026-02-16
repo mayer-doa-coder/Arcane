@@ -87,17 +87,17 @@ wizard_lexer.exe ../input/sample.wiz ../output/output.txt
 
 ### Basic Usage
 ```bash
-./lexer/wizard_lexer.exe input/sample.wiz output/output.txt
+lexer\wizard_lexer.exe input/sample.wiz output/output.txt
 ```
 
 ### Read from file, output to stdout
 ```bash
-./lexer/wizard_lexer.exe input/sample.wiz
+lexer\wizard_lexer.exe input/sample.wiz
 ```
 
 ### Interactive mode (stdin)
 ```bash
-./lexer/wizard_lexer.exe
+lexer\wizard_lexer.exe
 ```
 
 ## Token Output Format
