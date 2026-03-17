@@ -2,7 +2,8 @@
 # Wizard-inspired programming language
 
 # Compiler and tools
-LEX = flex
+LEX = C:/MinGW/msys/1.0/bin/flex.exe
+BISON = C:/MinGW/msys/1.0/bin/bison.exe
 CC = gcc
 CXX = g++
 RM = rm -f
@@ -19,6 +20,9 @@ LEXER_OUTPUT = $(LEXER_DIR)/lex.yy.c
 LEXER_EXEC = $(LEXER_DIR)/wizard_lexer.exe
 
 PARSER_SOURCE = $(PARSER_DIR)/wizard.y
+PARSER_OUTPUT = $(PARSER_DIR)/wizard.tab.c
+PARSER_HEADER = $(PARSER_DIR)/wizard.tab.h
+PARSER_EXEC = $(PARSER_DIR)/wizard_parser.exe
 SAMPLE_INPUT = $(INPUT_DIR)/sample.wiz
 OUTPUT_FILE = $(OUTPUT_DIR)/output.txt
 
@@ -34,7 +38,22 @@ all: lexer
 .PHONY: lexer
 lexer: $(LEXER_EXEC)
 
-$(LEXER_EXEC): $(LEXER_SOURCE)
+# Build parser foundation
+.PHONY: parser
+parser: $(PARSER_EXEC)
+
+$(PARSER_EXEC): $(PARSER_SOURCE)
+	@echo "Generating parser from wizard.y..."
+	cd $(PARSER_DIR) && $(BISON) -d wizard.y
+	@echo "Compiling parser..."
+	cd $(PARSER_DIR) && $(CXX) $(CXXFLAGS) wizard.tab.c -o wizard_parser.exe
+	@echo "Parser built successfully!"
+
+$(PARSER_HEADER): $(PARSER_SOURCE)
+	@echo "Generating parser header from wizard.y..."
+	cd $(PARSER_DIR) && $(BISON) -d wizard.y
+
+$(LEXER_EXEC): $(LEXER_SOURCE) $(PARSER_HEADER)
 	@echo "Generating lexer from wizard.l..."
 	cd $(LEXER_DIR) && $(LEX) wizard.l
 	@echo "Compiling lexer..."
@@ -61,7 +80,7 @@ run: $(LEXER_EXEC)
 clean:
 	@echo "Cleaning generated files..."
 	-cd $(LEXER_DIR) && $(RM) lex.yy.c lex.yy.cc wizard_lexer.exe
-	-cd $(PARSER_DIR) && $(RM) *.tab.c *.tab.h
+	-cd $(PARSER_DIR) && $(RM) *.tab.c *.tab.h wizard_parser.exe
 	-cd $(OUTPUT_DIR) && $(RM) output.txt
 	@echo "Clean complete!"
 
@@ -74,6 +93,7 @@ help:
 	@echo "Available targets:"
 	@echo "  make          - Build the lexer (default)"
 	@echo "  make lexer    - Build the lexer"
+	@echo "  make parser   - Build the parser skeleton"
 	@echo "  make test     - Build and test lexer with sample.wiz"
 	@echo "  make run      - Run lexer and display output to console"
 	@echo "  make clean    - Remove generated files"

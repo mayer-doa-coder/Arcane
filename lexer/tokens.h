@@ -1,0 +1,62 @@
+#ifndef ARCANE_WIZARD_TOKENS_H
+#define ARCANE_WIZARD_TOKENS_H
+
+#define WZ_KW_ENTER_HOGWARTS "ENTER_HOGWARTS"
+#define WZ_KW_EXIT_HOGWARTS "EXIT_HOGWARTS"
+#define WZ_KW_HOUSE "HOUSE"
+#define WZ_KW_ENDHOUSE "ENDHOUSE"
+
+#define WZ_KW_GRYFFINDOR "Gryffindor"
+#define WZ_KW_SLYTHERIN "Slytherin"
+#define WZ_KW_HUFFLEPUFF "Hufflepuff"
+#define WZ_KW_RAVENCLAW "Ravenclaw"
+
+#define WZ_KW_INT "INT"
+#define WZ_KW_FLOAT "FLOAT"
+#define WZ_KW_DOUBLE "DOUBLE"
+#define WZ_KW_LONG "LONG"
+#define WZ_KW_CHAR "CHAR"
+#define WZ_KW_BOOL "BOOL"
+#define WZ_KW_VOID "VOID"
+
+#define WZ_KW_DECLARE "DECLARE"
+#define WZ_KW_AS "AS"
+#define WZ_KW_IF "IF"
+#define WZ_KW_FI "FI"
+#define WZ_KW_ELSE "ELSE"
+#define WZ_KW_CHECK "CHECK"
+#define WZ_KW_THEN "THEN"
+#define WZ_KW_ENDCHECK "ENDCHECK"
+
+#define WZ_KW_LOOP "LOOP"
+#define WZ_KW_DO "DO"
+#define WZ_KW_ENDLOOP "ENDLOOP"
+#define WZ_KW_BREAK "BREAK"
+#define WZ_KW_CONTINUE "CONTINUE"
+
+#define WZ_KW_SPELL "SPELL"
+#define WZ_KW_ENDSPELL "ENDSPELL"
+#define WZ_KW_SUMMON "SUMMON"
+#define WZ_KW_WITH "WITH"
+#define WZ_KW_RETURN "RETURN"
+
+#define WZ_KW_CAST "CAST"
+#define WZ_KW_PROPHECY "PROPHECY"
+#define WZ_KW_INPUT "INPUT"
+
+#define WZ_KW_POTION "POTION"
+#define WZ_KW_ENDPOTION "ENDPOTION"
+#define WZ_KW_SORTING_HAT "SORTING_HAT"
+#define WZ_KW_ENDHAT "ENDHAT"
+#define WZ_KW_CHECK_TYPES "CHECK_TYPES"
+#define WZ_KW_CHECK_DECLARATIONS "CHECK_DECLARATIONS"
+
+#define WZ_KW_AND "AND"
+#define WZ_KW_OR "OR"
+#define WZ_KW_NOT "NOT"
+#define WZ_KW_XOR "XOR"
+
+#define WZ_KW_TRUE "true"
+#define WZ_KW_FALSE "false"
+
+#endif

@@ -1,115 +1,61 @@
-## Arcane Language Sample Program
-## Demonstrates lexical features of the Wizard language
+## Wizard64 sample program using final keyword set
 
-#*
-  Multi-line comment demonstration
-  This spell calculates magical power
-*#
+ENTER_HOGWARTS HOUSE
+    Gryffindor HOUSE
+        DECLARE score AS INT := 10;
+        DECLARE ratio AS FLOAT := 3.14;
+        DECLARE charm AS DOUBLE := 2.71828;
+        DECLARE mana AS LONG := 9999;
+        DECLARE initial AS CHAR := 'W';
+        DECLARE ready AS BOOL := true;
+    ENDHOUSE
 
-spell fireball(power: essence, range: spirit) -> essence {
-    let damage = power ** 2;
-    manifest("Casting fireball with power: ");
-    manifest(damage);
-    return damage;
-}
+    Slytherin SPELL empower WITH(score, ratio) HOUSE
+        CAST("Empower spell started");
+        PROPHECY("score=", score);
 
-spell heal(target: scroll, amount: essence) -> oracle {
-    if (amount <= 0) {
-        manifest("Invalid heal amount!");
-        return false;
-    }
-    
-    manifest("Healing ");
-    manifest(target);
-    return true;
-}
+        CHECK(score > 0) THEN
+            DECLARE raised AS INT := score + 5;
+            RETURN raised;
+        ENDCHECK
 
-spell countDown(start: essence) -> void {
-    essence counter = start;
-    
-    while (counter > 0) {
-        manifest(counter);
-        counter--;
-        
-        if (counter == 5) {
-            manifest("Halfway there!");
-            continue;
-        }
-    }
-}
+        ELSE HOUSE
+            RETURN 0;
+        ENDHOUSE
+    ENDSPELL
 
-ritual main() {
-    ## Variable declarations
-    essence mana = 100;
-    spirit radius = 3.14159;
-    scroll wizardName = "Merlin";
-    rune initial = 'M';
-    oracle isAlive = true;
-    
-    ## Constants
-    const essence MAX_POWER = 9999;
-    const spirit PI = 3.14159265;
-    
-    ## Conditional logic
-    if (mana >= 50) {
-        let result = cast fireball(10, radius);
-        manifest("Fireball damage: ");
-        manifest(result);
-    } elseif (mana >= 25) {
-        cast heal(wizardName, 20);
-    } else {
-        manifest("Not enough mana!");
-    }
-    
-    ## Loop constructs
-    for (essence i = 0; i < 5; i++) {
-        manifest(i);
-    }
-    
-    ## Array operations
-    array essence[10] powerLevels;
-    powerLevels[0] = 42;
-    powerLevels[1] = 0xFF;
-    powerLevels[2] = 077;
-    
-    ## Arithmetic operations
-    essence calculation = (10 + 5) * 3 - 8 / 2 % 3;
-    calculation += 100;
-    calculation *= 2;
-    
-    ## Logical operations
-    oracle canCast = (mana > 0) && (isAlive == true) || false;
-    oracle isReady = !canCast;
-    
-    ## Bitwise operations
-    essence flags = 0b1010 & 0xFF;
-    flags = flags | 0x0F;
-    flags = flags ^ 0xAA;
-    flags = ~flags;
-    flags = flags << 2;
-    flags = flags >> 1;
-    
-    ## Relational comparisons
-    if (mana != 0 && mana <= MAX_POWER && mana >= 10) {
-        manifest("Mana level acceptable");
-    }
-    
-    ## Type casting
-    spirit converted = transmute(mana);
-    
-    ## Input operation
-    summon(wizardName);
-    
-    ## Debug output
-    scry(mana);
-    
-    ## Grimoire (struct) example
-    grimoire Wizard {
-        scroll name;
-        essence level;
-        spirit health;
-    };
-    
-    return 0;
-}
+    Ravenclaw LOOP(score > 0) DO
+        score = score - 1;
+
+        IF score == 5 HOUSE
+            CAST("Halfway reached");
+            CONTINUE;
+        FI
+
+        IF score == 2 HOUSE
+            BREAK;
+        FI
+    ENDLOOP
+
+    POTION HOUSE
+        DECLARE p AS FLOAT := POWER(2);
+        DECLARE r AS FLOAT := ROOT(16);
+        DECLARE f AS FLOAT := FLOOR(2.8);
+        DECLARE c AS FLOAT := CEIL(2.1);
+        DECLARE a AS FLOAT := ABS(-7);
+        DECLARE l AS FLOAT := LOG(10);
+        DECLARE s AS FLOAT := SIN(1);
+        DECLARE co AS FLOAT := COS(1);
+        DECLARE t AS FLOAT := TAN(1);
+
+        DECLARE logic AS BOOL := true AND NOT false OR true XOR false;
+        INPUT(score);
+        SUMMON empower WITH(score, ratio);
+    ENDPOTION
+
+    SORTING_HAT HOUSE
+        CHECK_TYPES;
+        CHECK_DECLARATIONS;
+    ENDHAT
+EXIT_HOGWARTS ENDHOUSE
 

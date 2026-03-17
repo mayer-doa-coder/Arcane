@@ -1,0 +1,6 @@
+ENTER_HOGWARTS HOUSE
+    DECLARE value AS INT := 42;
+    IF value >= 10 HOUSE
+        CAST("Value is valid");
+    FI
+EXIT_HOGWARTS ENDHOUSE

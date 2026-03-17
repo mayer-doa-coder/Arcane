@@ -1,0 +1,14 @@
+<258, "ENTER_HOGWARTS">
+<260, "HOUSE">
+<262, "Gryffindor">
+<260, "HOUSE">
+<273, "DECLARE">
+<305, "a">
+<274, "AS">
+<266, "INT">
+<61, "=">
+<306, "10">
+<59, ";">
+<261, "ENDHOUSE">
+<259, "EXIT_HOGWARTS">
+<261, "ENDHOUSE">

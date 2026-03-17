@@ -1,238 +1,83 @@
-# Arcane Lexer - Quick Start Guide
+# Arcane Quick Start Memo (Wizard64)
 
-## What You Have
+This memo gets you from a clean checkout to running lexer and parser checks on Windows.
 
-Your Arcane lexer is fully functional! Here's what's been implemented:
+## 0) Prerequisites
 
-### Files Created/Updated
-1. **[lexer/wizard.l](lexer/wizard.l)** - Complete Flex specification with:
-   - 30+ wizard-themed keywords
-   - All operators (arithmetic, logical, relational, bitwise, assignment)
-   - Support for integers, floats, strings, characters
-   - Single-line (`##`) and multi-line (`#* *#`) comments
-   - Comprehensive error handling
+- `make`
+- `gcc/g++`
+- `flex` and `bison` available at:
+  - `C:/MinGW/msys/1.0/bin/flex.exe`
+  - `C:/MinGW/msys/1.0/bin/bison.exe`
 
-2. **[input/sample.wiz](input/sample.wiz)** - Comprehensive test program demonstrating all features
+## 1) Open project root
 
-3. **[LEXER_PRD.md](LEXER_PRD.md)** - Complete specification document for LLM reference
+Run from the repo root:
 
-4. **[Makefile](Makefile)** - Build automation
-
-5. **[README.md](README.md)** - Complete project documentation
-
-6. **[output/output.txt](output/output.txt)** - Sample tokenization output
-
-## Quick Commands
-
-### Build the Lexer
 ```bash
-cd lexer
-flex wizard.l
-g++ lex.yy.c -o wizard_lexer.exe
+cd d:\Arcane
 ```
 
-### Run on Sample File
+## 2) Build lexer
+
 ```bash
-# Output to file
-./lexer/wizard_lexer.exe input/sample.wiz output/output.txt
-
-# Output to console
-./lexer/wizard_lexer.exe input/sample.wiz
+make lexer
 ```
 
-### Using Your Own .wiz File
+Expected output artifact:
+- `lexer/wizard_lexer.exe`
+
+## 3) Run sample to console
+
 ```bash
-./lexer/wizard_lexer.exe your_file.wiz output.txt
+make run
 ```
 
-## Token Types Reference
+## 4) Generate token output file
 
-### Keywords (31 total)
-```
-KEYWORD_SPELL, KEYWORD_RITUAL, KEYWORD_CAST
-KEYWORD_IF, KEYWORD_ELSE, KEYWORD_ELSEIF
-KEYWORD_WHILE, KEYWORD_FOR, KEYWORD_REPEAT, KEYWORD_UNTIL
-KEYWORD_BREAK, KEYWORD_CONTINUE, KEYWORD_RETURN
-KEYWORD_ESSENCE, KEYWORD_SPIRIT, KEYWORD_RUNE, KEYWORD_SCROLL
-KEYWORD_ORACLE, KEYWORD_VOID, KEYWORD_ARRAY, KEYWORD_GRIMOIRE
-KEYWORD_TRUE, KEYWORD_FALSE, KEYWORD_NULL
-KEYWORD_SUMMON, KEYWORD_MANIFEST, KEYWORD_SCRY
-KEYWORD_CONST, KEYWORD_LET, KEYWORD_ENCHANT
-KEYWORD_BIND, KEYWORD_TRANSMUTE
+```bash
+make test
 ```
 
-### Operators (30+ total)
-- Arithmetic: `OP_PLUS`, `OP_MINUS`, `OP_MULTIPLY`, `OP_DIVIDE`, `OP_MODULUS`, `OP_POWER`
-- Increment/Decrement: `OP_INCREMENT`, `OP_DECREMENT`
-- Relational: `OP_EQUAL`, `OP_NOT_EQUAL`, `OP_GREATER`, `OP_LESS`, `OP_GREATER_EQUAL`, `OP_LESS_EQUAL`
-- Logical: `OP_AND`, `OP_OR`, `OP_NOT`
-- Assignment: `OP_ASSIGN`, `OP_PLUS_ASSIGN`, `OP_MINUS_ASSIGN`, `OP_MULTIPLY_ASSIGN`, `OP_DIVIDE_ASSIGN`, `OP_MODULUS_ASSIGN`
-- Bitwise: `OP_BITWISE_AND`, `OP_BITWISE_OR`, `OP_BITWISE_XOR`, `OP_BITWISE_NOT`, `OP_LEFT_SHIFT`, `OP_RIGHT_SHIFT`
+Output file:
+- `output/output.txt`
 
-### Delimiters (11 total)
-```
-DELIM_LPAREN, DELIM_RPAREN          # ( )
-DELIM_LBRACE, DELIM_RBRACE          # { }
-DELIM_LBRACKET, DELIM_RBRACKET      # [ ]
-DELIM_SEMICOLON, DELIM_COMMA         # ; ,
-DELIM_DOT, DELIM_COLON, DELIM_ARROW  # . : ->
+## 5) Run your own `.wiz` file
+
+PowerShell / CMD (Windows):
+
+```bash
+.\lexer\wizard_lexer.exe input\your_file.wiz output\output.txt
 ```
 
-### Literals
-- `INTEGER_LITERAL` - Decimal, hex (0xFF), octal (077)
-- `FLOAT_LITERAL` - 3.14, 1.5e10
-- `STRING_LITERAL` - "text"
-- `CHAR_LITERAL` - 'c'
+## 6) Build parser skeleton (optional)
 
-### Other
-- `IDENTIFIER` - Variable/function names
-- `UNKNOWN` - Unrecognized characters (errors)
-
-## Sample Output Format
-
-Input:
-```arcane
-spell fireball(power: essence) -> essence {
-    return power ** 2;
-}
+```bash
+make parser
 ```
 
-Output:
-```
-=== Arcane Lexical Analysis ===
-Tokenizing input...
+Expected output artifact:
+- `parser/wizard_parser.exe`
 
-<KEYWORD_SPELL, "spell", line:1>
-<IDENTIFIER, "fireball", line:1>
-<DELIM_LPAREN, "(", line:1>
-<IDENTIFIER, "power", line:1>
-<DELIM_COLON, ":", line:1>
-<KEYWORD_ESSENCE, "essence", line:1>
-<DELIM_RPAREN, ")", line:1>
-<DELIM_ARROW, "->", line:1>
-<KEYWORD_ESSENCE, "essence", line:1>
-<DELIM_LBRACE, "{", line:1>
-<KEYWORD_RETURN, "return", line:2>
-<IDENTIFIER, "power", line:2>
-<OP_POWER, "**", line:2>
-<INTEGER_LITERAL, "2", line:2>
-<DELIM_SEMICOLON, ";", line:2>
-<DELIM_RBRACE, "}", line:3>
+Quick parser smoke test:
 
-=== Tokenization Complete ===
-Total lines processed: 3
+```bash
+.\parser\wizard_parser.exe input\parser-smoke.wiz
 ```
 
-## Integration with Bison (Future)
+## 7) Clean generated artifacts
 
-The lexer is designed for easy Bison integration:
-
-1. Token types can be used in `wizard.y`
-2. `yylex()` function returns tokens sequentially
-3. `yyin` and `yyout` are compatible with Bison
-4. Line number tracking built-in for error reporting
-
-### Example Bison Token Declaration
-```c
-%token KEYWORD_SPELL KEYWORD_RITUAL KEYWORD_CAST
-%token KEYWORD_IF KEYWORD_ELSE KEYWORD_WHILE
-%token KEYWORD_ESSENCE KEYWORD_SPIRIT KEYWORD_ORACLE
-%token IDENTIFIER INTEGER_LITERAL FLOAT_LITERAL STRING_LITERAL
-%token OP_PLUS OP_MINUS OP_MULTIPLY OP_DIVIDE
-// ... etc
+```bash
+make clean
 ```
 
-## Testing Your Lexer
+## Minimal Wizard64 Program
 
-### Test Cases to Try
-
-1. **All Keywords**
-```arcane
-spell ritual cast if else while for
-essence spirit rune scroll oracle
-manifest summon scry
+```wiz
+ENTER_HOGWARTS HOUSE
+    DECLARE x AS INT := 10;
+    IF x > 0 HOUSE
+        CAST("Ready");
+    FI
+EXIT_HOGWARTS ENDHOUSE
 ```
-
-2. **All Operators**
-```arcane
-+ - * / % ** ++ --
-== != > < >= <=
-&& || !
-= += -= *= /=
-& | ^ ~ << >>
-```
-
-3. **Literals**
-```arcane
-42          ## integer
-0xFF        ## hex
-077         ## octal
-3.14        ## float
-1.5e-10     ## scientific
-"hello"     ## string
-'A'         ## char
-```
-
-4. **Comments**
-```arcane
-## Single line comment
-
-#*
-  Multi-line
-  comment
-*#
-```
-
-5. **Error Handling**
-```arcane
-@#$%        ## Should produce UNKNOWN tokens
-"unterminated string
-```
-
-## Next Steps
-
-### For Bison Integration
-1. Create `parser/wizard.y`
-2. Define grammar rules for:
-   - Spell declarations
-   - Ritual (main) block
-   - Expressions
-   - Statements
-   - Control structures
-3. Generate parser: `bison -d wizard.y`
-4. Link lexer and parser: `g++ lex.yy.c wizard.tab.c -o arcane`
-
-### Enhancements
-- Add column number tracking
-- Implement symbol table
-- Add preprocessor directives
-- Support for Unicode identifiers
-- Better error recovery
-
-## Troubleshooting
-
-### Compilation Errors
-- Ensure Flex is installed: `flex --version`
-- Ensure GCC/G++ is installed: `g++ --version`
-- Check file paths are correct
-
-### Runtime Errors
-- Verify input file exists
-- Check output directory is writable
-- Ensure file path uses correct slashes for your OS
-
-### Unexpected Tokens
-- Check keyword spelling (case-sensitive)
-- Verify operator patterns
-- Review comment syntax (`##` and `#* *#`)
-
-## Support Files
-
-- **Full Specification**: See [LEXER_PRD.md](LEXER_PRD.md)
-- **Project README**: See [README.md](README.md)
-- **Sample Program**: See [input/sample.wiz](input/sample.wiz)
-- **Sample Output**: See [output/output.txt](output/output.txt)
-
----
-
-**Your lexer is production-ready for the next phase (Bison parser)!**
