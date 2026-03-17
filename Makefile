@@ -1,5 +1,5 @@
 # Arcane Language Compiler Makefile
-# Wizard-inspired programming language
+# Wizard64 Edition
 
 # Compiler and tools
 LEX = C:/MinGW/msys/1.0/bin/flex.exe
@@ -23,6 +23,7 @@ PARSER_SOURCE = $(PARSER_DIR)/wizard.y
 PARSER_OUTPUT = $(PARSER_DIR)/wizard.tab.c
 PARSER_HEADER = $(PARSER_DIR)/wizard.tab.h
 PARSER_EXEC = $(PARSER_DIR)/wizard_parser.exe
+
 SAMPLE_INPUT = $(INPUT_DIR)/sample.wiz
 OUTPUT_FILE = $(OUTPUT_DIR)/output.txt
 
@@ -32,13 +33,13 @@ CXXFLAGS = -Wall
 
 # Default target
 .PHONY: all
-all: lexer
+all: parser
 
 # Build lexer only
 .PHONY: lexer
 lexer: $(LEXER_EXEC)
 
-# Build parser foundation
+# Build parser
 .PHONY: parser
 parser: $(PARSER_EXEC)
 
@@ -60,15 +61,22 @@ $(LEXER_EXEC): $(LEXER_SOURCE) $(PARSER_HEADER)
 	cd $(LEXER_DIR) && $(CXX) $(CXXFLAGS) lex.yy.c -o wizard_lexer.exe
 	@echo "Lexer built successfully!"
 
-# Run lexer on sample input
-.PHONY: test
-test: $(LEXER_EXEC)
+# Run lexer on sample input and save to file
+.PHONY: test-lexer
+test-lexer: $(LEXER_EXEC)
 	@echo "Running lexer on sample.wiz..."
 	$(LEXER_EXEC) $(SAMPLE_INPUT) $(OUTPUT_FILE)
 	@echo "Output written to $(OUTPUT_FILE)"
-	@echo ""
-	@echo "First 50 lines of output:"
-	@head -n 50 $(OUTPUT_FILE) || type $(OUTPUT_FILE) | more
+
+# Run parser on sample input
+.PHONY: test-parser
+test-parser: $(PARSER_EXEC)
+	@echo "Running parser on sample.wiz..."
+	$(PARSER_EXEC) < $(SAMPLE_INPUT)
+
+# Default test alias
+.PHONY: test
+test: test-lexer
 
 # Run lexer to stdout
 .PHONY: run
@@ -80,7 +88,7 @@ run: $(LEXER_EXEC)
 clean:
 	@echo "Cleaning generated files..."
 	-cd $(LEXER_DIR) && $(RM) lex.yy.c lex.yy.cc wizard_lexer.exe
-	-cd $(PARSER_DIR) && $(RM) *.tab.c *.tab.h wizard_parser.exe
+	-cd $(PARSER_DIR) && $(RM) *.tab.c *.tab.h *.output lex.yy.c wizard_parser.exe
 	-cd $(OUTPUT_DIR) && $(RM) output.txt
 	@echo "Clean complete!"
 
@@ -91,15 +99,17 @@ help:
 	@echo "========================================="
 	@echo ""
 	@echo "Available targets:"
-	@echo "  make          - Build the lexer (default)"
-	@echo "  make lexer    - Build the lexer"
-	@echo "  make parser   - Build the parser skeleton"
-	@echo "  make test     - Build and test lexer with sample.wiz"
-	@echo "  make run      - Run lexer and display output to console"
-	@echo "  make clean    - Remove generated files"
-	@echo "  make help     - Display this help message"
+	@echo "  make            - Build the parser (default)"
+	@echo "  make parser     - Build the parser"
+	@echo "  make lexer      - Build the lexer"
+	@echo "  make test       - Build and test lexer with sample.wiz"
+	@echo "  make test-lexer - Build and test lexer with sample.wiz"
+	@echo "  make test-parser- Build and test parser with sample.wiz"
+	@echo "  make run        - Run lexer and display output to console"
+	@echo "  make clean      - Remove generated files"
+	@echo "  make help       - Display this help message"
 	@echo ""
 	@echo "Manual usage:"
-	@echo "  $(LEXER_EXEC) <input.wiz> [output.txt]"
+	@echo "  Lexer:  $(LEXER_EXEC) <input.wiz> [output.txt]"
+	@echo "  Parser: $(PARSER_EXEC) < <input.wiz>"
 	@echo ""
-

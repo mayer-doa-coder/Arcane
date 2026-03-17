@@ -50,19 +50,20 @@ PowerShell / CMD (Windows):
 .\lexer\wizard_lexer.exe input\your_file.wiz output\output.txt
 ```
 
-## 6) Build parser skeleton (optional)
+## 6) Build and run parser
 
 ```bash
 make parser
+make test-parser
 ```
 
 Expected output artifact:
 - `parser/wizard_parser.exe`
 
-Quick parser smoke test:
+Manual parser run:
 
 ```bash
-.\parser\wizard_parser.exe input\parser-smoke.wiz
+.\parser\wizard_parser.exe < input\sample.wiz
 ```
 
 ## 7) Clean generated artifacts
