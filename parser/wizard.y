@@ -15,6 +15,18 @@ extern FILE *yyin;
 FILE *yyin = NULL;
 #endif
 
+int current_house = 0;
+
+static const char *house_name_from_id(int house_id) {
+	switch (house_id) {
+		case 1: return "Gryffindor";
+		case 2: return "Slytherin";
+		case 3: return "Hufflepuff";
+		case 4: return "Ravenclaw";
+		default: return "Unknown";
+	}
+}
+
 #ifndef USE_FLEX_LEXER
 static int scan_number(int first);
 static int scan_identifier_or_keyword(int first);
@@ -41,7 +53,7 @@ static int scan_char(void);
 %left OR XOR
 %left AND
 %right NOT
-%left EQ NE '>' '<' GE LE
+%left '>' '<' GE LE EQ NE
 %left '+' '-'
 %left '*' '/' '%'
 %right UMINUS
@@ -49,7 +61,7 @@ static int scan_char(void);
 %%
 
 program:
-	ENTER_HOGWARTS HOUSE house_blocks EXIT_HOGWARTS ENDHOUSE
+	ENTER_HOGWARTS house_blocks EXIT_HOGWARTS
 ;
 
 house_blocks:
@@ -66,15 +78,21 @@ house_block:
 ;
 
 role_house_block:
-	house_role HOUSE statements ENDHOUSE
+	  GRYFFINDOR HOUSE { current_house = 1; } statements ENDHOUSE { current_house = 0; }
+	| HUFFLEPUFF HOUSE { current_house = 3; } statements ENDHOUSE { current_house = 0; }
+	| RAVENCLAW HOUSE { current_house = 4; } statements ENDHOUSE { current_house = 0; }
+	| HOUSE GRYFFINDOR { current_house = 1; } statements ENDHOUSE { current_house = 0; }
+	| HOUSE HUFFLEPUFF { current_house = 3; } statements ENDHOUSE { current_house = 0; }
+	| HOUSE RAVENCLAW { current_house = 4; } statements ENDHOUSE { current_house = 0; }
+	| HOUSE SLYTHERIN { current_house = 2; } statements ENDHOUSE { current_house = 0; }
 ;
 
 function_house_block:
-	SLYTHERIN SPELL IDENTIFIER WITH '(' id_list_opt ')' HOUSE statements ENDSPELL
+	SLYTHERIN { current_house = 2; } function { current_house = 0; }
 ;
 
 ravenclaw_loop_block:
-	RAVENCLAW LOOP '(' expression ')' DO statements ENDLOOP
+	RAVENCLAW LOOP expr DO statements ENDLOOP
 ;
 
 potion_block:
@@ -85,10 +103,10 @@ sorting_hat_block:
 	SORTING_HAT HOUSE semantic_checks ENDHAT
 ;
 
-house_role:
-	  GRYFFINDOR
-	| HUFFLEPUFF
-	| RAVENCLAW
+function:
+	  SPELL IDENTIFIER WITH '(' id_list_opt ')' HOUSE statements ENDSPELL
+	| SPELL IDENTIFIER HOUSE statements ENDSPELL
+	| SPELL IDENTIFIER statements ENDSPELL
 ;
 
 semantic_checks:
@@ -109,11 +127,11 @@ statements:
 statement:
 	  declaration
 	| assignment
+	| function
 	| print_stmt
 	| input_stmt
-	| call_stmt
+	| call
 	| if_stmt
-	| check_stmt
 	| loop_stmt
 	| break_stmt
 	| continue_stmt
@@ -123,7 +141,17 @@ statement:
 
 declaration:
 	DECLARE IDENTIFIER AS type_spec init_opt ';'
+	{
+		if (current_house != 1) {
+			fprintf(stderr, "Semantic error: declaration is only allowed in Gryffindor (current: %s)\n", house_name_from_id(current_house));
+		}
+	}
 	| DECLARE IDENTIFIER AS INT '=' NUMBER opt_semi
+	{
+		if (current_house != 1) {
+			fprintf(stderr, "Semantic error: declaration is only allowed in Gryffindor (current: %s)\n", house_name_from_id(current_house));
+		}
+	}
 ;
 
 type_spec:
@@ -142,16 +170,15 @@ init_opt:
 ;
 
 assignment:
-	  IDENTIFIER '=' expression ';'
-	| IDENTIFIER INIT_ASSIGN expression ';'
-	| IDENTIFIER '=' IDENTIFIER opt_semi
-	| IDENTIFIER '=' NUMBER opt_semi
+	  IDENTIFIER '=' expr ';'
+	| IDENTIFIER INIT_ASSIGN expr ';'
 ;
 
 print_stmt:
 	  CAST '(' arg_list_opt ')' ';'
 	| PROPHECY '(' arg_list_opt ')' ';'
 	| CAST IDENTIFIER opt_semi
+	| CAST STRING opt_semi
 	| PROPHECY STRING ',' IDENTIFIER opt_semi
 ;
 
@@ -164,16 +191,14 @@ input_stmt:
 	INPUT '(' IDENTIFIER ')' ';'
 ;
 
-call_stmt:
-	SUMMON IDENTIFIER WITH '(' arg_list_opt ')' ';'
+call:
+	  SUMMON IDENTIFIER ';'
+	| SUMMON IDENTIFIER WITH '(' arg_list_opt ')' ';'
 ;
 
 if_stmt:
 	IF expression HOUSE statements FI
-;
-
-check_stmt:
-	CHECK '(' expression ')' THEN statements ENDCHECK
+	| CHECK expr THEN statements ENDCHECK
 ;
 
 else_block:
@@ -181,7 +206,7 @@ else_block:
 ;
 
 loop_stmt:
-	LOOP '(' expression ')' DO statements ENDLOOP
+	LOOP expr DO statements ENDLOOP
 ;
 
 break_stmt:
@@ -221,26 +246,30 @@ id_list:
 	| id_list ',' IDENTIFIER
 ;
 
+expr:
+	  expr '+' expr
+	| expr '-' expr
+	| expr '*' expr
+	| expr '/' expr
+	| expr '>' expr
+	| expr '<' expr
+	| expr GE expr
+	| expr LE expr
+	| expr EQ expr
+	| expr NE expr
+	| IDENTIFIER
+	| NUMBER
+;
+
 expression:
-	  NUMBER
+	  expr
 	| STRING
 	| CHAR_LITERAL
 	| BOOL_LITERAL
-	| IDENTIFIER
 	| '(' expression ')'
 	| '-' expression %prec UMINUS
 	| NOT expression
-	| expression '+' expression
-	| expression '-' expression
-	| expression '*' expression
-	| expression '/' expression
 	| expression '%' expression
-	| expression EQ expression
-	| expression NE expression
-	| expression '>' expression
-	| expression '<' expression
-	| expression GE expression
-	| expression LE expression
 	| expression AND expression
 	| expression OR expression
 	| expression XOR expression

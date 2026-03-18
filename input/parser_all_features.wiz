@@ -1,0 +1,27 @@
+ENTER_HOGWARTS
+
+HOUSE Gryffindor
+DECLARE a AS INT = 10;
+DECLARE b AS INT = 2;
+
+SPELL add WITH (x, y) HOUSE
+DECLARE sum AS INT = 0;
+sum = x + y;
+ENDSPELL
+
+CHECK a < 0 THEN
+CAST "Negative";
+ENDCHECK
+
+LOOP b < 5 DO
+b = b + 1;
+ENDLOOP
+
+SUMMON add WITH (a, b);
+ENDHOUSE
+
+HOUSE Hufflepuff
+DECLARE z AS INT = 3;
+ENDHOUSE
+
+EXIT_HOGWARTS
