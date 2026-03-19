@@ -4,6 +4,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include "../lexer/tokens.h"
+#include "../symbol_table/symbol_table.h"
 
 int yylex(void);
 void yyerror(const char *s);
@@ -16,6 +17,39 @@ FILE *yyin = NULL;
 #endif
 
 int current_house = 0;
+int current_scope_level = 0;
+char current_function_name[ARCANE_MAX_NAME_LEN] = "";
+
+static char *arcane_strdup(const char *text) {
+	size_t len;
+	char *copy;
+
+	if (!text) {
+		return NULL;
+	}
+
+	len = strlen(text);
+	copy = (char *)malloc(len + 1);
+	if (!copy) {
+		return NULL;
+	}
+
+	memcpy(copy, text, len + 1);
+	return copy;
+}
+
+static void sync_symbol_context(void) {
+	arcane_symbol_set_context(current_scope_level, current_function_name, (ArcaneHouse)current_house);
+}
+
+static void report_semantic_error(const char *message, const char *name) {
+	if (name && name[0] != '\0') {
+		fprintf(stderr, "Semantic error: %s %s\n", message, name);
+		return;
+	}
+
+	fprintf(stderr, "Semantic error: %s\n", message);
+}
 
 static const char *house_name_from_id(int house_id) {
 	switch (house_id) {
@@ -37,6 +71,11 @@ static int scan_char(void);
 
 %start program
 
+%union {
+	int ival;
+	char *sval;
+}
+
 %token ENTER_HOGWARTS EXIT_HOGWARTS HOUSE ENDHOUSE
 %token GRYFFINDOR SLYTHERIN HUFFLEPUFF RAVENCLAW
 %token INT FLOAT DOUBLE LONG CHAR BOOL VOID
@@ -47,8 +86,11 @@ static int scan_char(void);
 %token CAST PROPHECY INPUT
 %token POTION ENDPOTION SORTING_HAT ENDHAT CHECK_TYPES CHECK_DECLARATIONS
 %token AND OR NOT XOR
-%token IDENTIFIER NUMBER STRING CHAR_LITERAL BOOL_LITERAL
+%token <sval> IDENTIFIER STRING CHAR_LITERAL BOOL_LITERAL
+%token <ival> NUMBER
 %token EQ NE GE LE
+
+%type <ival> type_spec init_opt
 
 %left OR XOR
 %left AND
@@ -61,7 +103,14 @@ static int scan_char(void);
 %%
 
 program:
-	ENTER_HOGWARTS house_blocks EXIT_HOGWARTS
+	ENTER_HOGWARTS
+	{
+		arcane_symbols_reset();
+		current_scope_level = 0;
+		current_function_name[0] = '\0';
+		sync_symbol_context();
+	}
+	house_blocks EXIT_HOGWARTS
 ;
 
 house_blocks:
@@ -78,17 +127,17 @@ house_block:
 ;
 
 role_house_block:
-	  GRYFFINDOR HOUSE { current_house = 1; } statements ENDHOUSE { current_house = 0; }
-	| HUFFLEPUFF HOUSE { current_house = 3; } statements ENDHOUSE { current_house = 0; }
-	| RAVENCLAW HOUSE { current_house = 4; } statements ENDHOUSE { current_house = 0; }
-	| HOUSE GRYFFINDOR { current_house = 1; } statements ENDHOUSE { current_house = 0; }
-	| HOUSE HUFFLEPUFF { current_house = 3; } statements ENDHOUSE { current_house = 0; }
-	| HOUSE RAVENCLAW { current_house = 4; } statements ENDHOUSE { current_house = 0; }
-	| HOUSE SLYTHERIN { current_house = 2; } statements ENDHOUSE { current_house = 0; }
+	  GRYFFINDOR HOUSE { current_house = 1; sync_symbol_context(); } statements ENDHOUSE { current_house = 0; sync_symbol_context(); }
+	| HUFFLEPUFF HOUSE { current_house = 3; sync_symbol_context(); } statements ENDHOUSE { current_house = 0; sync_symbol_context(); }
+	| RAVENCLAW HOUSE { current_house = 4; sync_symbol_context(); } statements ENDHOUSE { current_house = 0; sync_symbol_context(); }
+	| HOUSE GRYFFINDOR { current_house = 1; sync_symbol_context(); } statements ENDHOUSE { current_house = 0; sync_symbol_context(); }
+	| HOUSE HUFFLEPUFF { current_house = 3; sync_symbol_context(); } statements ENDHOUSE { current_house = 0; sync_symbol_context(); }
+	| HOUSE RAVENCLAW { current_house = 4; sync_symbol_context(); } statements ENDHOUSE { current_house = 0; sync_symbol_context(); }
+	| HOUSE SLYTHERIN { current_house = 2; sync_symbol_context(); } statements ENDHOUSE { current_house = 0; sync_symbol_context(); }
 ;
 
 function_house_block:
-	SLYTHERIN { current_house = 2; } function { current_house = 0; }
+	SLYTHERIN { current_house = 2; sync_symbol_context(); } function { current_house = 0; sync_symbol_context(); }
 ;
 
 ravenclaw_loop_block:
@@ -104,9 +153,60 @@ sorting_hat_block:
 ;
 
 function:
-	  SPELL IDENTIFIER WITH '(' id_list_opt ')' HOUSE statements ENDSPELL
-	| SPELL IDENTIFIER HOUSE statements ENDSPELL
-	| SPELL IDENTIFIER statements ENDSPELL
+	  SPELL IDENTIFIER
+	  {
+		int function_insert_result;
+		function_insert_result = arcane_insert_symbol($2, ARCANE_SYMBOL_FUNCTION, ARCANE_TYPE_VOID, (ArcaneHouse)current_house, 0, "", 0);
+		if (function_insert_result == ARCANE_SYMBOL_DUPLICATE) {
+			report_semantic_error("duplicate function", $2);
+		}
+		arcane_copy_text(current_function_name, sizeof(current_function_name), $2);
+		current_scope_level = 1;
+		sync_symbol_context();
+		free($2);
+	  }
+	  WITH '(' id_list_opt ')' HOUSE statements ENDSPELL
+	  {
+		current_scope_level = 0;
+		current_function_name[0] = '\0';
+		sync_symbol_context();
+	  }
+	| SPELL IDENTIFIER
+	  {
+		int function_insert_result;
+		function_insert_result = arcane_insert_symbol($2, ARCANE_SYMBOL_FUNCTION, ARCANE_TYPE_VOID, (ArcaneHouse)current_house, 0, "", 0);
+		if (function_insert_result == ARCANE_SYMBOL_DUPLICATE) {
+			report_semantic_error("duplicate function", $2);
+		}
+		arcane_copy_text(current_function_name, sizeof(current_function_name), $2);
+		current_scope_level = 1;
+		sync_symbol_context();
+		free($2);
+	  }
+	  HOUSE statements ENDSPELL
+	  {
+		current_scope_level = 0;
+		current_function_name[0] = '\0';
+		sync_symbol_context();
+	  }
+	| SPELL IDENTIFIER
+	  {
+		int function_insert_result;
+		function_insert_result = arcane_insert_symbol($2, ARCANE_SYMBOL_FUNCTION, ARCANE_TYPE_VOID, (ArcaneHouse)current_house, 0, "", 0);
+		if (function_insert_result == ARCANE_SYMBOL_DUPLICATE) {
+			report_semantic_error("duplicate function", $2);
+		}
+		arcane_copy_text(current_function_name, sizeof(current_function_name), $2);
+		current_scope_level = 1;
+		sync_symbol_context();
+		free($2);
+	  }
+	  statements ENDSPELL
+	  {
+		current_scope_level = 0;
+		current_function_name[0] = '\0';
+		sync_symbol_context();
+	  }
 ;
 
 semantic_checks:
@@ -142,44 +242,78 @@ statement:
 declaration:
 	DECLARE IDENTIFIER AS type_spec init_opt ';'
 	{
+		int declaration_result;
+		sync_symbol_context();
 		if (current_house != 1) {
 			fprintf(stderr, "Semantic error: declaration is only allowed in Gryffindor (current: %s)\n", house_name_from_id(current_house));
 		}
+
+		declaration_result = arcane_insert_variable($2, (ArcaneType)$4, (ArcaneHouse)current_house, current_scope_level, current_function_name, 0);
+		if (declaration_result == ARCANE_SYMBOL_DUPLICATE) {
+			report_semantic_error("duplicate variable", $2);
+		}
+		if ($5 && declaration_result == ARCANE_SYMBOL_OK) {
+			int symbol_index = lookup_symbol($2);
+			if (symbol_index >= 0) {
+				arcane_symbol_table_mark_initialized(&g_arcane_symbol_table, symbol_index);
+			}
+		}
+		free($2);
 	}
 	| DECLARE IDENTIFIER AS INT '=' NUMBER opt_semi
 	{
+		sync_symbol_context();
 		if (current_house != 1) {
 			fprintf(stderr, "Semantic error: declaration is only allowed in Gryffindor (current: %s)\n", house_name_from_id(current_house));
 		}
+
+		if (insert_symbol($2, ARCANE_TYPE_INT, $6) == ARCANE_SYMBOL_DUPLICATE) {
+			report_semantic_error("duplicate variable", $2);
+		}
+		free($2);
 	}
 ;
 
 type_spec:
-	  INT
-	| FLOAT
-	| DOUBLE
-	| LONG
-	| CHAR
-	| BOOL
-	| VOID
+	  INT { $$ = ARCANE_TYPE_INT; }
+	| FLOAT { $$ = ARCANE_TYPE_FLOAT; }
+	| DOUBLE { $$ = ARCANE_TYPE_DOUBLE; }
+	| LONG { $$ = ARCANE_TYPE_LONG; }
+	| CHAR { $$ = ARCANE_TYPE_CHAR; }
+	| BOOL { $$ = ARCANE_TYPE_BOOL; }
+	| VOID { $$ = ARCANE_TYPE_VOID; }
 ;
 
 init_opt:
-	  INIT_ASSIGN expression
-	|
+	  INIT_ASSIGN expression { $$ = 1; }
+	| { $$ = 0; }
 ;
 
 assignment:
 	  IDENTIFIER '=' expr ';'
+	  {
+		sync_symbol_context();
+		if (lookup_symbol($1) < 0) {
+			report_semantic_error("undeclared variable", $1);
+		}
+		free($1);
+	  }
 	| IDENTIFIER INIT_ASSIGN expr ';'
+	  {
+		sync_symbol_context();
+		if (lookup_symbol($1) < 0) {
+			report_semantic_error("undeclared variable", $1);
+		}
+		free($1);
+	  }
 ;
 
 print_stmt:
 	  CAST '(' arg_list_opt ')' ';'
 	| PROPHECY '(' arg_list_opt ')' ';'
-	| CAST IDENTIFIER opt_semi
-	| CAST STRING opt_semi
-	| PROPHECY STRING ',' IDENTIFIER opt_semi
+	| CAST IDENTIFIER opt_semi { free($2); }
+	| CAST STRING opt_semi { free($2); }
+	| PROPHECY STRING ',' IDENTIFIER opt_semi { free($2); free($4); }
 ;
 
 opt_semi:
@@ -189,11 +323,32 @@ opt_semi:
 
 input_stmt:
 	INPUT '(' IDENTIFIER ')' ';'
+	{
+		sync_symbol_context();
+		if (lookup_symbol($3) < 0) {
+			report_semantic_error("undeclared variable", $3);
+		}
+		free($3);
+	}
 ;
 
 call:
 	  SUMMON IDENTIFIER ';'
+	  {
+		sync_symbol_context();
+		if (lookup_symbol($2) < 0) {
+			report_semantic_error("undeclared function", $2);
+		}
+		free($2);
+	  }
 	| SUMMON IDENTIFIER WITH '(' arg_list_opt ')' ';'
+	  {
+		sync_symbol_context();
+		if (lookup_symbol($2) < 0) {
+			report_semantic_error("undeclared function", $2);
+		}
+		free($2);
+	  }
 ;
 
 if_stmt:
@@ -243,7 +398,25 @@ id_list_opt:
 
 id_list:
 	  IDENTIFIER
+	  {
+		int parameter_insert_result;
+		sync_symbol_context();
+		parameter_insert_result = arcane_insert_symbol($1, ARCANE_SYMBOL_PARAMETER, ARCANE_TYPE_UNKNOWN, (ArcaneHouse)current_house, current_scope_level, current_function_name, 0);
+		if (parameter_insert_result == ARCANE_SYMBOL_DUPLICATE) {
+			report_semantic_error("duplicate parameter", $1);
+		}
+		free($1);
+	  }
 	| id_list ',' IDENTIFIER
+	  {
+		int parameter_insert_result;
+		sync_symbol_context();
+		parameter_insert_result = arcane_insert_symbol($3, ARCANE_SYMBOL_PARAMETER, ARCANE_TYPE_UNKNOWN, (ArcaneHouse)current_house, current_scope_level, current_function_name, 0);
+		if (parameter_insert_result == ARCANE_SYMBOL_DUPLICATE) {
+			report_semantic_error("duplicate parameter", $3);
+		}
+		free($3);
+	  }
 ;
 
 expr:
@@ -258,14 +431,21 @@ expr:
 	| expr EQ expr
 	| expr NE expr
 	| IDENTIFIER
+	  {
+		sync_symbol_context();
+		if (lookup_symbol($1) < 0) {
+			report_semantic_error("undeclared variable", $1);
+		}
+		free($1);
+	  }
 	| NUMBER
 ;
 
 expression:
 	  expr
-	| STRING
-	| CHAR_LITERAL
-	| BOOL_LITERAL
+	| STRING { free($1); }
+	| CHAR_LITERAL { free($1); }
+	| BOOL_LITERAL { free($1); }
 	| '(' expression ')'
 	| '-' expression %prec UMINUS
 	| NOT expression
@@ -274,6 +454,13 @@ expression:
 	| expression OR expression
 	| expression XOR expression
 	| IDENTIFIER '(' arg_list_opt ')'
+	  {
+		sync_symbol_context();
+		if (lookup_symbol($1) < 0) {
+			report_semantic_error("undeclared function", $1);
+		}
+		free($1);
+	  }
 ;
 
 %%
@@ -346,11 +533,18 @@ static int scan_identifier_or_keyword(int first) {
 	if (strcmp(buffer, WZ_KW_OR) == 0) return OR;
 	if (strcmp(buffer, WZ_KW_NOT) == 0) return NOT;
 	if (strcmp(buffer, WZ_KW_XOR) == 0) return XOR;
-	if (strcmp(buffer, WZ_KW_TRUE) == 0 || strcmp(buffer, WZ_KW_FALSE) == 0) return BOOL_LITERAL;
+	if (strcmp(buffer, WZ_KW_TRUE) == 0 || strcmp(buffer, WZ_KW_FALSE) == 0) {
+		yylval.sval = arcane_strdup(buffer);
+		return BOOL_LITERAL;
+	}
+
+	yylval.sval = arcane_strdup(buffer);
 	return IDENTIFIER;
 }
 
 static int scan_number(int first) {
+	char buffer[256];
+	int length = 0;
 	int ch = first;
 	int seen_dot = 0;
 
@@ -358,8 +552,14 @@ static int scan_number(int first) {
 		if (ch == '.') {
 			seen_dot = 1;
 		}
+		if (length < (int)sizeof(buffer) - 1) {
+			buffer[length++] = (char)ch;
+		}
 		ch = fgetc(yyin);
 	}
+
+	buffer[length] = '\0';
+	yylval.ival = atoi(buffer);
 
 	if (ch != EOF) {
 		ungetc(ch, yyin);
@@ -368,26 +568,51 @@ static int scan_number(int first) {
 }
 
 static int scan_string(void) {
+	char buffer[256];
+	int length = 0;
 	int ch;
 	while ((ch = fgetc(yyin)) != EOF) {
 		if (ch == '\\') {
-			(void)fgetc(yyin);
+			int escaped = fgetc(yyin);
+			if (escaped == EOF) {
+				break;
+			}
+			if (length < (int)sizeof(buffer) - 2) {
+				buffer[length++] = '\\';
+				buffer[length++] = (char)escaped;
+			}
 			continue;
 		}
 		if (ch == '"') {
+			buffer[length] = '\0';
+			yylval.sval = arcane_strdup(buffer);
 			return STRING;
+		}
+		if (length < (int)sizeof(buffer) - 1) {
+			buffer[length++] = (char)ch;
 		}
 	}
 	return 0;
 }
 
 static int scan_char(void) {
+	char buffer[4] = {0};
+	int length = 0;
 	int ch = fgetc(yyin);
 	if (ch == '\\') {
-		(void)fgetc(yyin);
+		int escaped = fgetc(yyin);
+		if (escaped == EOF) {
+			return 0;
+		}
+		buffer[length++] = '\\';
+		buffer[length++] = (char)escaped;
+	} else if (ch != EOF) {
+		buffer[length++] = (char)ch;
 	}
 	ch = fgetc(yyin);
 	if (ch == '\'') {
+		buffer[length] = '\0';
+		yylval.sval = arcane_strdup(buffer);
 		return CHAR_LITERAL;
 	}
 	return 0;
