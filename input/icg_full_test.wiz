@@ -1,0 +1,26 @@
+ENTER_HOGWARTS
+HOUSE Gryffindor
+DECLARE a AS INT := 1;
+DECLARE b AS INT := 2;
+DECLARE max AS INT := 0;
+DECLARE cnt AS INT := 0;
+
+max = a + b;
+max = max * b;
+max = max - a;
+max = max / a;
+
+CHECK max > b THEN
+max = max + 1;
+ENDCHECK
+
+IF a < b HOUSE
+max = max + b;
+FI
+
+LOOP cnt < 3 DO
+cnt = cnt + 1;
+ENDLOOP
+
+ENDHOUSE
+EXIT_HOGWARTS

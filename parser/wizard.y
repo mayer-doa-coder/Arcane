@@ -5,6 +5,7 @@
 #include <string.h>
 #include "../lexer/tokens.h"
 #include "../symbol_table/symbol_table.h"
+#include "../icg/icg.h"
 
 int yylex(void);
 void yyerror(const char *s);
@@ -19,6 +20,10 @@ FILE *yyin = NULL;
 int current_house = 0;
 int current_scope_level = 0;
 char current_function_name[ARCANE_MAX_NAME_LEN] = "";
+ArcaneICG g_icg;
+char *loop_start_stack[64];
+char *loop_end_stack[64];
+int loop_stack_top = -1;
 
 static char *arcane_strdup(const char *text) {
 	size_t len;
@@ -49,6 +54,50 @@ static void report_semantic_error(const char *message, const char *name) {
 	}
 
 	fprintf(stderr, "Semantic error: %s\n", message);
+}
+
+static char *emit_binary_temp(const char *op, char *left, char *right) {
+	char *temp;
+
+	if (!left || !right || !op) {
+		free(left);
+		free(right);
+		return icg_dup_text("0");
+	}
+
+	temp = icg_new_temp(&g_icg);
+	if (!temp) {
+		temp = icg_dup_text(left);
+		free(left);
+		free(right);
+		return temp;
+	}
+
+	icg_emit_binary(&g_icg, temp, left, op, right);
+	free(left);
+	free(right);
+	return temp;
+}
+
+static char *wrap_literal(const char *text, char quote) {
+	size_t length;
+	char *result;
+
+	if (!text) {
+		return NULL;
+	}
+
+	length = strlen(text);
+	result = (char *)malloc(length + 3);
+	if (!result) {
+		return NULL;
+	}
+
+	result[0] = quote;
+	memcpy(result + 1, text, length);
+	result[length + 1] = quote;
+	result[length + 2] = '\0';
+	return result;
 }
 
 static const char *house_name_from_id(int house_id) {
@@ -90,7 +139,8 @@ static int scan_char(void);
 %token <ival> NUMBER
 %token EQ NE GE LE
 
-%type <ival> type_spec init_opt
+%type <ival> type_spec
+%type <sval> init_opt expr expression
 
 %left OR XOR
 %left AND
@@ -106,11 +156,18 @@ program:
 	ENTER_HOGWARTS
 	{
 		arcane_symbols_reset();
+		icg_init(&g_icg, stdout);
+		icg_reset(&g_icg);
+		loop_stack_top = -1;
 		current_scope_level = 0;
 		current_function_name[0] = '\0';
 		sync_symbol_context();
+		icg_emit(&g_icg, "# ICG BEGIN\n");
 	}
 	house_blocks EXIT_HOGWARTS
+	{
+		icg_emit(&g_icg, "# ICG END\n");
+	}
 ;
 
 house_blocks:
@@ -257,11 +314,14 @@ declaration:
 			if (symbol_index >= 0) {
 				arcane_symbol_table_mark_initialized(&g_arcane_symbol_table, symbol_index);
 			}
+			icg_emit_assign(&g_icg, $2, $5);
 		}
+		free($5);
 		free($2);
 	}
 	| DECLARE IDENTIFIER AS INT '=' NUMBER opt_semi
 	{
+		char *literal_value;
 		sync_symbol_context();
 		if (current_house != 1) {
 			fprintf(stderr, "Semantic error: declaration is only allowed in Gryffindor (current: %s)\n", house_name_from_id(current_house));
@@ -269,6 +329,12 @@ declaration:
 
 		if (insert_symbol($2, ARCANE_TYPE_INT, $6) == ARCANE_SYMBOL_DUPLICATE) {
 			report_semantic_error("duplicate variable", $2);
+		} else {
+			literal_value = icg_int_literal($6);
+			if (literal_value) {
+				icg_emit_assign(&g_icg, $2, literal_value);
+			}
+			free(literal_value);
 		}
 		free($2);
 	}
@@ -285,8 +351,8 @@ type_spec:
 ;
 
 init_opt:
-	  INIT_ASSIGN expression { $$ = 1; }
-	| { $$ = 0; }
+	  INIT_ASSIGN expression { $$ = $2; }
+	| { $$ = NULL; }
 ;
 
 assignment:
@@ -296,6 +362,10 @@ assignment:
 		if (lookup_symbol($1) < 0) {
 			report_semantic_error("undeclared variable", $1);
 		}
+		if ($3) {
+			icg_emit_assign(&g_icg, $1, $3);
+		}
+		free($3);
 		free($1);
 	  }
 	| IDENTIFIER INIT_ASSIGN expr ';'
@@ -304,6 +374,10 @@ assignment:
 		if (lookup_symbol($1) < 0) {
 			report_semantic_error("undeclared variable", $1);
 		}
+		if ($3) {
+			icg_emit_assign(&g_icg, $1, $3);
+		}
+		free($3);
 		free($1);
 	  }
 ;
@@ -339,6 +413,7 @@ call:
 		if (lookup_symbol($2) < 0) {
 			report_semantic_error("undeclared function", $2);
 		}
+		icg_emit(&g_icg, "call %s\n", $2);
 		free($2);
 	  }
 	| SUMMON IDENTIFIER WITH '(' arg_list_opt ')' ';'
@@ -347,13 +422,36 @@ call:
 		if (lookup_symbol($2) < 0) {
 			report_semantic_error("undeclared function", $2);
 		}
+		icg_emit(&g_icg, "call %s\n", $2);
 		free($2);
 	  }
 ;
 
 if_stmt:
-	IF expression HOUSE statements FI
-	| CHECK expr THEN statements ENDCHECK
+	IF expression
+	{
+		char *end_label = icg_new_label(&g_icg);
+		icg_emit_if_false(&g_icg, $2, end_label);
+		free($2);
+		$<sval>$ = end_label;
+	}
+	HOUSE statements FI
+	{
+		icg_emit_label(&g_icg, $<sval>3);
+		free($<sval>3);
+	}
+	| CHECK expr
+	{
+		char *end_label = icg_new_label(&g_icg);
+		icg_emit_if_false(&g_icg, $2, end_label);
+		free($2);
+		$<sval>$ = end_label;
+	}
+	THEN statements ENDCHECK
+	{
+		icg_emit_label(&g_icg, $<sval>3);
+		free($<sval>3);
+	}
 ;
 
 else_block:
@@ -361,15 +459,52 @@ else_block:
 ;
 
 loop_stmt:
-	LOOP expr DO statements ENDLOOP
+	LOOP
+	{
+		char *loop_start = icg_new_label(&g_icg);
+		char *loop_end = icg_new_label(&g_icg);
+		if (loop_start && loop_end && loop_stack_top < 63) {
+			loop_stack_top++;
+			loop_start_stack[loop_stack_top] = loop_start;
+			loop_end_stack[loop_stack_top] = loop_end;
+			icg_emit_label(&g_icg, loop_start);
+		}
+	}
+	expr DO
+	{
+		if (loop_stack_top >= 0) {
+			icg_emit_if_false(&g_icg, $3, loop_end_stack[loop_stack_top]);
+		}
+		free($3);
+	}
+	statements ENDLOOP
+	{
+		if (loop_stack_top >= 0) {
+			icg_emit_goto(&g_icg, loop_start_stack[loop_stack_top]);
+			icg_emit_label(&g_icg, loop_end_stack[loop_stack_top]);
+			free(loop_start_stack[loop_stack_top]);
+			free(loop_end_stack[loop_stack_top]);
+			loop_stack_top--;
+		}
+	}
 ;
 
 break_stmt:
 	BREAK ';'
+	{
+		if (loop_stack_top >= 0) {
+			icg_emit_goto(&g_icg, loop_end_stack[loop_stack_top]);
+		}
+	}
 ;
 
 continue_stmt:
 	CONTINUE ';'
+	{
+		if (loop_stack_top >= 0) {
+			icg_emit_goto(&g_icg, loop_start_stack[loop_stack_top]);
+		}
+	}
 ;
 
 return_stmt:
@@ -387,8 +522,8 @@ arg_list_opt:
 ;
 
 arg_list:
-	  expression
-	| arg_list ',' expression
+	  expression { free($1); }
+	| arg_list ',' expression { free($3); }
 ;
 
 id_list_opt:
@@ -420,45 +555,71 @@ id_list:
 ;
 
 expr:
-	  expr '+' expr
-	| expr '-' expr
-	| expr '*' expr
-	| expr '/' expr
-	| expr '>' expr
-	| expr '<' expr
-	| expr GE expr
-	| expr LE expr
-	| expr EQ expr
-	| expr NE expr
+	  expr '+' expr { $$ = emit_binary_temp("+", $1, $3); }
+	| expr '-' expr { $$ = emit_binary_temp("-", $1, $3); }
+	| expr '*' expr { $$ = emit_binary_temp("*", $1, $3); }
+	| expr '/' expr { $$ = emit_binary_temp("/", $1, $3); }
+	| expr '>' expr { $$ = emit_binary_temp(">", $1, $3); }
+	| expr '<' expr { $$ = emit_binary_temp("<", $1, $3); }
+	| expr GE expr { $$ = emit_binary_temp(">=", $1, $3); }
+	| expr LE expr { $$ = emit_binary_temp("<=", $1, $3); }
+	| expr EQ expr { $$ = emit_binary_temp("==", $1, $3); }
+	| expr NE expr { $$ = emit_binary_temp("!=", $1, $3); }
 	| IDENTIFIER
 	  {
 		sync_symbol_context();
 		if (lookup_symbol($1) < 0) {
 			report_semantic_error("undeclared variable", $1);
 		}
+		$$ = icg_dup_text($1);
 		free($1);
 	  }
-	| NUMBER
+	| NUMBER { $$ = icg_int_literal($1); }
 ;
 
 expression:
-	  expr
-	| STRING { free($1); }
-	| CHAR_LITERAL { free($1); }
-	| BOOL_LITERAL { free($1); }
-	| '(' expression ')'
+	  expr { $$ = $1; }
+	| STRING
+	  {
+		$$ = wrap_literal($1, '"');
+		free($1);
+	  }
+	| CHAR_LITERAL
+	  {
+		$$ = wrap_literal($1, '\'');
+		free($1);
+	  }
+	| BOOL_LITERAL { $$ = $1; }
+	| '(' expression ')' { $$ = $2; }
 	| '-' expression %prec UMINUS
+	  {
+		$$ = emit_binary_temp("*", icg_int_literal(-1), $2);
+	  }
 	| NOT expression
-	| expression '%' expression
-	| expression AND expression
-	| expression OR expression
-	| expression XOR expression
+	  {
+		char *temp = icg_new_temp(&g_icg);
+		if (temp && $2) {
+			icg_emit(&g_icg, "%s = NOT %s\n", temp, $2);
+		}
+		free($2);
+		$$ = temp;
+	  }
+	| expression '%' expression { $$ = emit_binary_temp("%", $1, $3); }
+	| expression AND expression { $$ = emit_binary_temp("AND", $1, $3); }
+	| expression OR expression { $$ = emit_binary_temp("OR", $1, $3); }
+	| expression XOR expression { $$ = emit_binary_temp("XOR", $1, $3); }
 	| IDENTIFIER '(' arg_list_opt ')'
 	  {
+		char *temp;
 		sync_symbol_context();
 		if (lookup_symbol($1) < 0) {
 			report_semantic_error("undeclared function", $1);
 		}
+		temp = icg_new_temp(&g_icg);
+		if (temp) {
+			icg_emit(&g_icg, "%s = call %s\n", temp, $1);
+		}
+		$$ = temp;
 		free($1);
 	  }
 ;
