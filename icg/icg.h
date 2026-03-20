@@ -7,10 +7,14 @@ typedef struct {
     int temp_count;
     int label_count;
     FILE *out;
+    char **lines;
+    int line_count;
+    int line_capacity;
 } ArcaneICG;
 
 void icg_init(ArcaneICG *icg, FILE *output);
 void icg_reset(ArcaneICG *icg);
+void icg_release(ArcaneICG *icg);
 
 char *icg_new_temp(ArcaneICG *icg);
 char *icg_new_label(ArcaneICG *icg);
@@ -23,5 +27,6 @@ void icg_emit_assign(ArcaneICG *icg, const char *target, const char *source);
 void icg_emit_label(ArcaneICG *icg, const char *label);
 void icg_emit_goto(ArcaneICG *icg, const char *label);
 void icg_emit_if_false(ArcaneICG *icg, const char *condition_place, const char *label);
+void print_icg(const ArcaneICG *icg, FILE *output);
 
 #endif

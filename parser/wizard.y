@@ -6,6 +6,7 @@
 #include "../lexer/tokens.h"
 #include "../symbol_table/symbol_table.h"
 #include "../icg/icg.h"
+#include "../optimizer/optimizer.h"
 
 int yylex(void);
 void yyerror(const char *s);
@@ -167,6 +168,9 @@ program:
 	house_blocks EXIT_HOGWARTS
 	{
 		icg_emit(&g_icg, "# ICG END\n");
+		optimizer_run_all(&g_icg);
+		print_icg(&g_icg, stdout);
+		icg_release(&g_icg);
 	}
 ;
 

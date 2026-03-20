@@ -47,7 +47,7 @@ $(PARSER_EXEC): $(PARSER_SOURCE)
 	@echo "Generating parser from wizard.y..."
 	cd $(PARSER_DIR) && $(BISON) -d wizard.y
 	@echo "Compiling parser..."
-	cd $(PARSER_DIR) && $(CXX) $(CXXFLAGS) wizard.tab.c ../symbol_table/symbol_table.c ../icg/icg.c -o wizard_parser.exe
+	cd $(PARSER_DIR) && $(CXX) $(CXXFLAGS) wizard.tab.c ../symbol_table/symbol_table.c ../icg/icg.c ../optimizer/optimizer.c -o wizard_parser.exe
 	@echo "Parser built successfully!"
 
 $(PARSER_HEADER): $(PARSER_SOURCE)

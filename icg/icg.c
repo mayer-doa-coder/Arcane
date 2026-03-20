@@ -5,6 +5,48 @@
 #include <stdlib.h>
 #include <string.h>
 
+static void icg_free_lines(ArcaneICG *icg) {
+    int index;
+
+    if (!icg || !icg->lines) {
+        return;
+    }
+
+    for (index = 0; index < icg->line_count; ++index) {
+        free(icg->lines[index]);
+    }
+
+    free(icg->lines);
+    icg->lines = NULL;
+    icg->line_count = 0;
+    icg->line_capacity = 0;
+}
+
+static int icg_append_line(ArcaneICG *icg, char *line_text) {
+    char **grown;
+    int new_capacity;
+
+    if (!icg || !line_text) {
+        free(line_text);
+        return 0;
+    }
+
+    if (icg->line_count >= icg->line_capacity) {
+        new_capacity = (icg->line_capacity == 0) ? 32 : icg->line_capacity * 2;
+        grown = (char **)realloc(icg->lines, sizeof(char *) * (size_t)new_capacity);
+        if (!grown) {
+            free(line_text);
+            return 0;
+        }
+        icg->lines = grown;
+        icg->line_capacity = new_capacity;
+    }
+
+    icg->lines[icg->line_count] = line_text;
+    icg->line_count++;
+    return 1;
+}
+
 static char *icg_alloc_formatted(const char *prefix, int index) {
     char buffer[64];
     int written;
@@ -32,6 +74,9 @@ void icg_init(ArcaneICG *icg, FILE *output) {
     icg->temp_count = 0;
     icg->label_count = 0;
     icg->out = output ? output : stdout;
+    icg->lines = NULL;
+    icg->line_count = 0;
+    icg->line_capacity = 0;
 }
 
 void icg_reset(ArcaneICG *icg) {
@@ -39,8 +84,20 @@ void icg_reset(ArcaneICG *icg) {
         return;
     }
 
+    icg_free_lines(icg);
     icg->temp_count = 0;
     icg->label_count = 0;
+}
+
+void icg_release(ArcaneICG *icg) {
+    if (!icg) {
+        return;
+    }
+
+    icg_free_lines(icg);
+    icg->temp_count = 0;
+    icg->label_count = 0;
+    icg->out = NULL;
 }
 
 char *icg_new_temp(ArcaneICG *icg) {
@@ -100,14 +157,34 @@ char *icg_int_literal(int value) {
 
 void icg_emit(ArcaneICG *icg, const char *format, ...) {
     va_list args;
+    va_list args_copy;
+    int required;
+    char *line_text;
 
-    if (!icg || !icg->out || !format) {
+    if (!icg || !format) {
         return;
     }
 
     va_start(args, format);
-    vfprintf(icg->out, format, args);
+    va_copy(args_copy, args);
+    required = vsnprintf(NULL, 0, format, args_copy);
+    va_end(args_copy);
+
+    if (required < 0) {
+        va_end(args);
+        return;
+    }
+
+    line_text = (char *)malloc((size_t)required + 1);
+    if (!line_text) {
+        va_end(args);
+        return;
+    }
+
+    vsnprintf(line_text, (size_t)required + 1, format, args);
     va_end(args);
+
+    (void)icg_append_line(icg, line_text);
 }
 
 void icg_emit_binary(ArcaneICG *icg, const char *result, const char *left, const char *op, const char *right) {
@@ -148,4 +225,24 @@ void icg_emit_if_false(ArcaneICG *icg, const char *condition_place, const char *
     }
 
     icg_emit(icg, "ifFalse %s goto %s\n", condition_place, label);
+}
+
+void print_icg(const ArcaneICG *icg, FILE *output) {
+    int index;
+    FILE *stream;
+
+    if (!icg) {
+        return;
+    }
+
+    stream = output ? output : icg->out;
+    if (!stream) {
+        stream = stdout;
+    }
+
+    for (index = 0; index < icg->line_count; ++index) {
+        if (icg->lines[index]) {
+            fputs(icg->lines[index], stream);
+        }
+    }
 }

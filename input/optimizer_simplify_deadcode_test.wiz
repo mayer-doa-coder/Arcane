@@ -1,0 +1,15 @@
+ENTER_HOGWARTS
+HOUSE Gryffindor
+DECLARE a AS INT := 4;
+DECLARE b AS INT := 5;
+DECLARE keep AS INT := 0;
+DECLARE drop AS INT := 0;
+
+keep = a + 0;
+keep = b * 1;
+drop = a + b;
+CHECK 1 < 2 THEN
+keep = keep + 1;
+ENDCHECK
+ENDHOUSE
+EXIT_HOGWARTS

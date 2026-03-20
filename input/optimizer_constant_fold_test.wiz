@@ -1,0 +1,9 @@
+ENTER_HOGWARTS
+HOUSE Gryffindor
+DECLARE result AS INT := 0;
+result = 5 + 3;
+CHECK 10 > 2 THEN
+result = result + 1;
+ENDCHECK
+ENDHOUSE
+EXIT_HOGWARTS

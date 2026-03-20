@@ -1,0 +1,12 @@
+ENTER_HOGWARTS
+HOUSE Gryffindor
+DECLARE a AS INT := 0;
+DECLARE b AS INT := 0;
+DECLARE c AS INT := 0;
+
+a = 5 + 3;
+b = a + 0;
+c = b * 1;
+
+ENDHOUSE
+EXIT_HOGWARTS
