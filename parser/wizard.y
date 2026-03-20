@@ -7,6 +7,7 @@
 #include "../symbol_table/symbol_table.h"
 #include "../icg/icg.h"
 #include "../optimizer/optimizer.h"
+#include "../codegen/codegen.h"
 
 int yylex(void);
 void yyerror(const char *s);
@@ -170,6 +171,9 @@ program:
 		icg_emit(&g_icg, "# ICG END\n");
 		optimizer_run_all(&g_icg);
 		print_icg(&g_icg, stdout);
+		if (generate_c_code(&g_arcane_symbol_table, &g_icg, "../output/output.c") != 0) {
+			fprintf(stderr, "Code generation warning: failed to write output C file\n");
+		}
 		icg_release(&g_icg);
 	}
 ;
@@ -389,9 +393,9 @@ assignment:
 print_stmt:
 	  CAST '(' arg_list_opt ')' ';'
 	| PROPHECY '(' arg_list_opt ')' ';'
-	| CAST IDENTIFIER opt_semi { free($2); }
-	| CAST STRING opt_semi { free($2); }
-	| PROPHECY STRING ',' IDENTIFIER opt_semi { free($2); free($4); }
+	| CAST IDENTIFIER opt_semi { icg_emit(&g_icg, "print %s\n", $2); free($2); }
+	| CAST STRING opt_semi { icg_emit(&g_icg, "print \"%s\"\n", $2); free($2); }
+	| PROPHECY STRING ',' IDENTIFIER opt_semi { icg_emit(&g_icg, "print \"%s\"\n", $2); icg_emit(&g_icg, "print %s\n", $4); free($2); free($4); }
 ;
 
 opt_semi:
