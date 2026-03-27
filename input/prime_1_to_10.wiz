@@ -1,0 +1,38 @@
+ENTER_HOGWARTS
+
+HOUSE Gryffindor
+DECLARE i AS INT := 1;
+ENDHOUSE
+
+Slytherin
+SPELL showPrime WITH (x) HOUSE
+CAST x;
+ENDSPELL
+
+Ravenclaw LOOP i < 11 DO
+CHECK i == 2 THEN
+SUMMON showPrime WITH (i);
+ENDCHECK
+
+CHECK i == 3 THEN
+SUMMON showPrime WITH (i);
+ENDCHECK
+
+CHECK i == 5 THEN
+SUMMON showPrime WITH (i);
+ENDCHECK
+
+CHECK i == 7 THEN
+SUMMON showPrime WITH (i);
+ENDCHECK
+
+i = i + 1;
+ENDLOOP
+
+HOUSE Hufflepuff
+CHECK i == 11 THEN
+CAST "Prime listing finished";
+ENDCHECK
+ENDHOUSE
+
+EXIT_HOGWARTS

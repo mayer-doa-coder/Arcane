@@ -14,9 +14,40 @@
 #endif
 
 int comment_depth = 0;
+extern int yylineno;
+int current_column = 1;
+int token_start_column = 1;
+
+static void update_column(const char *text, int length) {
+	int i;
+	if (!text || length <= 0) {
+		return;
+	}
+
+	for (i = 0; i < length; ++i) {
+		if (text[i] == '\n') {
+			current_column = 1;
+		} else {
+			current_column++;
+		}
+	}
+}
+
+static void report_lexical_error(const char *text) {
+	if (!text || text[0] == '\0') {
+		return;
+	}
+
+	fprintf(stderr, "Lexical Error (line %d, col %d): Unknown token '%s'\n", yylineno, token_start_column, text);
+}
+
+#define YY_USER_ACTION \
+	token_start_column = current_column; \
+	update_column(yytext, yyleng);
 %}
 
 %option noyywrap
+%option yylineno
 %x MULTILINE_COMMENT
 
 DIGIT           [0-9]
@@ -114,6 +145,7 @@ OCTAL           0[0-7]+
 {HEX}                       { return NUMBER; }
 {OCTAL}                     { return NUMBER; }
 {FLOAT_LITERAL}             { return NUMBER; }
+{INTEGER}{IDENTIFIER}       { report_lexical_error(yytext); }
 {INTEGER}                   { return NUMBER; }
 {IDENTIFIER}                { return IDENTIFIER; }
 
@@ -137,7 +169,13 @@ OCTAL           0[0-7]+
 ">"                         { return '>'; }
 "<"                         { return '<'; }
 
-.                           { return yytext[0]; }
+.                           { report_lexical_error(yytext); }
+
+<MULTILINE_COMMENT><<EOF>>  {
+							fprintf(stderr, "Lexical Error (line %d, col %d): Unterminated multiline comment\n", yylineno, token_start_column);
+							BEGIN(INITIAL);
+							return 0;
+						}
 
 %%
 
@@ -147,7 +185,7 @@ extern FILE *yyout;
 extern char *yytext;
 
 static void print_token_line(int token) {
-	fprintf(yyout, "<%d, \"%s\">\n", token, yytext);
+	fprintf(yyout, "<%d, \"%s\", line:%d, col:%d>\n", token, yytext, yylineno, token_start_column);
 }
 
 int main(int argc, char **argv) {

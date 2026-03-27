@@ -4,8 +4,8 @@
 #include "../icg/icg.h"
 
 void optimizer_constant_folding(ArcaneICG *icg);
-void optimizer_algebraic_simplification(ArcaneICG *icg);
-void optimizer_dead_temp_elimination(ArcaneICG *icg);
+void optimizer_copy_propagation(ArcaneICG *icg);
+void optimizer_dead_code_elimination(ArcaneICG *icg);
 void optimizer_run_all(ArcaneICG *icg);
 
 #endif

@@ -1,8 +1,14 @@
 #include "codegen.h"
 
-#include <stdio.h>
-#include <string.h>
 #include <ctype.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+
+typedef struct {
+    char items[ARCANE_MAX_FUNCTION_PARAMS][128];
+    int count;
+} ArcanePendingArgs;
 
 static const char *to_c_type(ArcaneType type) {
     switch (type) {
@@ -11,27 +17,13 @@ static const char *to_c_type(ArcaneType type) {
         case ARCANE_TYPE_LONG: return "long";
         case ARCANE_TYPE_CHAR: return "char";
         case ARCANE_TYPE_BOOL: return "int";
+        case ARCANE_TYPE_VOID: return "void";
+        case ARCANE_TYPE_STRING: return "const char *";
         case ARCANE_TYPE_INT:
         case ARCANE_TYPE_UNKNOWN:
         default:
             return "int";
     }
-}
-
-static int should_emit_assignment(const char *line) {
-    if (!line) {
-        return 0;
-    }
-
-    if (strstr(line, "ifFalse") || strstr(line, "goto ") || strstr(line, "call ")) {
-        return 0;
-    }
-
-    if (strchr(line, '=') == NULL) {
-        return 0;
-    }
-
-    return 1;
 }
 
 static int starts_with(const char *text, const char *prefix) {
@@ -52,32 +44,6 @@ static size_t line_content_length(const char *line) {
     return strcspn(line, "\r\n");
 }
 
-static int extract_lhs_name(const char *line, char *out, size_t out_size) {
-    const char *equal_pos;
-    size_t lhs_len;
-
-    if (!line || !out || out_size == 0) {
-        return 0;
-    }
-
-    equal_pos = strchr(line, '=');
-    if (!equal_pos) {
-        return 0;
-    }
-
-    lhs_len = (size_t)(equal_pos - line);
-    while (lhs_len > 0 && isspace((unsigned char)line[lhs_len - 1])) {
-        lhs_len--;
-    }
-    if (lhs_len == 0 || lhs_len >= out_size) {
-        return 0;
-    }
-
-    memcpy(out, line, lhs_len);
-    out[lhs_len] = '\0';
-    return 1;
-}
-
 static int is_temp_symbol(const char *name) {
     size_t index;
 
@@ -94,27 +60,270 @@ static int is_temp_symbol(const char *name) {
     return 1;
 }
 
-static int symbol_declared(const ArcaneSymbolTable *symbols, const char *name) {
-    int index;
-
-    if (!symbols || !name) {
+static int should_emit_assignment(const char *line) {
+    if (!line) {
         return 0;
     }
 
-    for (index = 0; index < symbols->count; ++index) {
-        const ArcaneSymbol *symbol = &symbols->entries[index];
-        if ((symbol->kind == ARCANE_SYMBOL_VARIABLE || symbol->kind == ARCANE_SYMBOL_PARAMETER) && strcmp(symbol->name, name) == 0) {
-            return 1;
+    if (strstr(line, "ifFalse") || strstr(line, "goto ") || strstr(line, " call ") || starts_with(line, "call ")) {
+        return 0;
+    }
+
+    return strchr(line, '=') != NULL;
+}
+
+static int line_is_call_assignment(const char *line) {
+    if (!line) {
+        return 0;
+    }
+    return strstr(line, " = call ") != NULL;
+}
+
+static int extract_lhs_name(const char *line, char *out, size_t out_size) {
+    const char *equal_pos;
+    const char *start;
+    size_t lhs_len;
+
+    if (!line || !out || out_size == 0) {
+        return 0;
+    }
+
+    equal_pos = strchr(line, '=');
+    if (!equal_pos) {
+        return 0;
+    }
+
+    start = line;
+    while (*start && isspace((unsigned char)*start)) {
+        start++;
+    }
+
+    lhs_len = (size_t)(equal_pos - start);
+    while (lhs_len > 0 && isspace((unsigned char)start[lhs_len - 1])) {
+        lhs_len--;
+    }
+
+    if (lhs_len == 0 || lhs_len >= out_size) {
+        return 0;
+    }
+
+    memcpy(out, start, lhs_len);
+    out[lhs_len] = '\0';
+    return 1;
+}
+
+static int line_is_function_marker(const char *line) {
+    return starts_with(line, "func_begin ") || starts_with(line, "func_end ") || starts_with(line, "param ");
+}
+
+static int line_is_main_ir(const char *line) {
+    return line && !line_is_function_marker(line);
+}
+
+static int parse_function_marker(const char *line, const char *prefix, char *name_out, size_t name_out_size) {
+    if (!line || !prefix || !name_out || name_out_size == 0) {
+        return 0;
+    }
+
+    if (!starts_with(line, prefix)) {
+        return 0;
+    }
+
+    return sscanf(line + strlen(prefix), "%63s", name_out) == 1;
+}
+
+static int find_function_symbol(const ArcaneSymbolTable *symbols, const char *function_name) {
+    int i;
+
+    if (!symbols || !function_name) {
+        return -1;
+    }
+
+    for (i = 0; i < symbols->count; ++i) {
+        const ArcaneSymbol *symbol = &symbols->entries[i];
+        if (symbol->kind == ARCANE_SYMBOL_FUNCTION && symbol->scope_level == 0 && symbol->owner_function[0] == '\0' && strcmp(symbol->name, function_name) == 0) {
+            return i;
         }
     }
 
-    return 0;
+    return -1;
 }
 
-static void emit_ir_line_as_c(FILE *fp, const char *line) {
+static int collect_function_param_names(const ArcaneSymbolTable *symbols, const char *function_name, char names[][ARCANE_MAX_NAME_LEN], int max_names) {
+    int i;
+    int count = 0;
+
+    if (!symbols || !function_name || !names || max_names <= 0) {
+        return 0;
+    }
+
+    for (i = 0; i < symbols->count && count < max_names; ++i) {
+        const ArcaneSymbol *symbol = &symbols->entries[i];
+        if (symbol->kind != ARCANE_SYMBOL_PARAMETER) {
+            continue;
+        }
+        if (strcmp(symbol->owner_function, function_name) != 0) {
+            continue;
+        }
+        strncpy(names[count], symbol->name, ARCANE_MAX_NAME_LEN - 1);
+        names[count][ARCANE_MAX_NAME_LEN - 1] = '\0';
+        count++;
+    }
+
+    return count;
+}
+
+static void emit_function_signature(FILE *fp, const ArcaneSymbol *function_symbol, const ArcaneSymbolTable *symbols, int with_semicolon) {
+    int i;
+    int param_name_count;
+    char param_names[ARCANE_MAX_FUNCTION_PARAMS][ARCANE_MAX_NAME_LEN];
+
+    if (!fp || !function_symbol || !symbols) {
+        return;
+    }
+
+    fprintf(fp, "%s %s(", to_c_type(function_symbol->type), function_symbol->name);
+
+    param_name_count = collect_function_param_names(symbols, function_symbol->name, param_names, ARCANE_MAX_FUNCTION_PARAMS);
+    if (function_symbol->param_count == 0) {
+        fprintf(fp, "void");
+    } else {
+        for (i = 0; i < function_symbol->param_count; ++i) {
+            if (i > 0) {
+                fprintf(fp, ", ");
+            }
+            fprintf(
+                fp,
+                "%s %s",
+                to_c_type(function_symbol->param_types[i]),
+                (i < param_name_count) ? param_names[i] : "arg"
+            );
+            if (i >= param_name_count) {
+                fprintf(fp, "%d", i + 1);
+            }
+        }
+    }
+
+    if (with_semicolon) {
+        fprintf(fp, ");\n");
+    } else {
+        fprintf(fp, ")");
+    }
+}
+
+static void emit_temp_declarations_for_range(FILE *fp, const ArcaneSymbolTable *symbols, const ArcaneICG *icg, int start_index, int end_index) {
+    int i;
+    char declared[ARCANE_MAX_SYMBOLS][64];
+    int declared_count = 0;
+
+    (void)symbols;
+
+    if (!fp || !symbols || !icg) {
+        return;
+    }
+
+    for (i = start_index; i <= end_index && i < icg->line_count; ++i) {
+        char lhs_name[64];
+        const char *line = icg->lines[i];
+
+        if (!line || (!should_emit_assignment(line) && !line_is_call_assignment(line))) {
+            continue;
+        }
+
+        if (!extract_lhs_name(line, lhs_name, sizeof(lhs_name))) {
+            continue;
+        }
+
+        if (is_temp_symbol(lhs_name)) {
+            int seen = 0;
+            int j;
+            for (j = 0; j < declared_count; ++j) {
+                if (strcmp(declared[j], lhs_name) == 0) {
+                    seen = 1;
+                    break;
+                }
+            }
+            if (seen) {
+                continue;
+            }
+            fprintf(fp, "    int %s;\n", lhs_name);
+            if (declared_count < ARCANE_MAX_SYMBOLS) {
+                strncpy(declared[declared_count], lhs_name, sizeof(declared[declared_count]) - 1);
+                declared[declared_count][sizeof(declared[declared_count]) - 1] = '\0';
+                declared_count++;
+            }
+        }
+    }
+}
+
+static void emit_function_local_declarations(FILE *fp, const ArcaneSymbolTable *symbols, const char *function_name) {
+    int i;
+
+    if (!fp || !symbols || !function_name) {
+        return;
+    }
+
+    for (i = 0; i < symbols->count; ++i) {
+        const ArcaneSymbol *symbol = &symbols->entries[i];
+        if (symbol->kind != ARCANE_SYMBOL_VARIABLE) {
+            continue;
+        }
+        if (strcmp(symbol->owner_function, function_name) != 0) {
+            continue;
+        }
+        fprintf(fp, "    %s %s;\n", to_c_type(symbol->type), symbol->name);
+    }
+}
+
+static void pending_args_reset(ArcanePendingArgs *pending) {
+    if (!pending) {
+        return;
+    }
+    pending->count = 0;
+}
+
+static void pending_args_push(ArcanePendingArgs *pending, const char *arg_expr) {
+    if (!pending || !arg_expr) {
+        return;
+    }
+    if (pending->count >= ARCANE_MAX_FUNCTION_PARAMS) {
+        return;
+    }
+
+    strncpy(pending->items[pending->count], arg_expr, sizeof(pending->items[pending->count]) - 1);
+    pending->items[pending->count][sizeof(pending->items[pending->count]) - 1] = '\0';
+    pending->count++;
+}
+
+static void emit_call_from_pending(FILE *fp, ArcanePendingArgs *pending, const char *target, const char *function_name, int arg_count) {
+    int i;
+
+    if (!fp || !pending || !function_name) {
+        return;
+    }
+
+    if (target && target[0] != '\0') {
+        fprintf(fp, "    %s = %s(", target, function_name);
+    } else {
+        fprintf(fp, "    %s(", function_name);
+    }
+
+    for (i = 0; i < arg_count; ++i) {
+        const char *arg_text = (i < pending->count) ? pending->items[i] : "0";
+        if (i > 0) {
+            fprintf(fp, ", ");
+        }
+        fprintf(fp, "%s", arg_text);
+    }
+
+    fprintf(fp, ");\n");
+    pending_args_reset(pending);
+}
+
+static void emit_ir_line_as_c(FILE *fp, const char *line, ArcanePendingArgs *pending) {
     size_t len;
 
-    if (!fp || !line) {
+    if (!fp || !line || !pending) {
         return;
     }
 
@@ -123,8 +332,53 @@ static void emit_ir_line_as_c(FILE *fp, const char *line) {
         return;
     }
 
+    if (line_is_function_marker(line)) {
+        return;
+    }
+
     if (line[0] == '#') {
         fprintf(fp, "    /* %.*s */\n", (int)len, line);
+        return;
+    }
+
+    if (starts_with(line, "arg ")) {
+        char arg_expr[128];
+        if (sscanf(line + 4, "%127[^\r\n]", arg_expr) == 1) {
+            pending_args_push(pending, arg_expr);
+        }
+        return;
+    }
+
+    if (strstr(line, " = call ")) {
+        char lhs[64];
+        char fn[64];
+        int argc = 0;
+        if (sscanf(line, " %63[^=]= call %63s %d", lhs, fn, &argc) == 3) {
+            size_t lhs_len = strlen(lhs);
+            while (lhs_len > 0 && isspace((unsigned char)lhs[lhs_len - 1])) {
+                lhs[--lhs_len] = '\0';
+            }
+            emit_call_from_pending(fp, pending, lhs, fn, argc);
+        }
+        return;
+    }
+
+    if (starts_with(line, "call ")) {
+        char fn[64];
+        int argc = 0;
+        if (sscanf(line, "call %63s %d", fn, &argc) == 2) {
+            emit_call_from_pending(fp, pending, NULL, fn, argc);
+        }
+        return;
+    }
+
+    if (starts_with(line, "return")) {
+        char ret_expr[128];
+        if (sscanf(line, "return %127[^\r\n]", ret_expr) == 1) {
+            fprintf(fp, "    return %s;\n", ret_expr);
+        } else {
+            fprintf(fp, "    return;\n");
+        }
         return;
     }
 
@@ -141,14 +395,6 @@ static void emit_ir_line_as_c(FILE *fp, const char *line) {
         char label[64];
         if (sscanf(line, "goto %63s", label) == 1) {
             fprintf(fp, "    goto %s;\n", label);
-        }
-        return;
-    }
-
-    if (starts_with(line, "call ")) {
-        char function_name[64];
-        if (sscanf(line, "call %63s", function_name) == 1) {
-            fprintf(fp, "    /* call %s */\n", function_name);
         }
         return;
     }
@@ -176,9 +422,165 @@ static void emit_ir_line_as_c(FILE *fp, const char *line) {
     }
 }
 
+static void emit_function_definitions(FILE *fp, const ArcaneSymbolTable *symbols, const ArcaneICG *icg) {
+    int i = 0;
+
+    while (i < icg->line_count) {
+        char function_name[64];
+        int function_symbol_index;
+        int end_index;
+        int has_explicit_return = 0;
+        ArcanePendingArgs pending;
+
+        if (!parse_function_marker(icg->lines[i], "func_begin ", function_name, sizeof(function_name))) {
+            i++;
+            continue;
+        }
+
+        function_symbol_index = find_function_symbol(symbols, function_name);
+        if (function_symbol_index < 0) {
+            i++;
+            continue;
+        }
+
+        end_index = i + 1;
+        while (end_index < icg->line_count) {
+            char end_name[64];
+            if (parse_function_marker(icg->lines[end_index], "func_end ", end_name, sizeof(end_name)) && strcmp(end_name, function_name) == 0) {
+                break;
+            }
+            end_index++;
+        }
+
+        emit_function_signature(fp, &symbols->entries[function_symbol_index], symbols, 0);
+        fprintf(fp, " {\n");
+
+        emit_function_local_declarations(fp, symbols, function_name);
+        emit_temp_declarations_for_range(fp, symbols, icg, i + 1, end_index - 1);
+
+        pending_args_reset(&pending);
+        fprintf(fp, "\n");
+
+        for (int k = i + 1; k < end_index; ++k) {
+            if (starts_with(icg->lines[k], "return")) {
+                has_explicit_return = 1;
+            }
+            emit_ir_line_as_c(fp, icg->lines[k], &pending);
+        }
+
+        if (!has_explicit_return && (symbols->entries[function_symbol_index].type == ARCANE_TYPE_INT ||
+            symbols->entries[function_symbol_index].type == ARCANE_TYPE_LONG ||
+            symbols->entries[function_symbol_index].type == ARCANE_TYPE_FLOAT ||
+            symbols->entries[function_symbol_index].type == ARCANE_TYPE_DOUBLE ||
+            symbols->entries[function_symbol_index].type == ARCANE_TYPE_CHAR ||
+            symbols->entries[function_symbol_index].type == ARCANE_TYPE_BOOL ||
+            symbols->entries[function_symbol_index].type == ARCANE_TYPE_UNKNOWN)) {
+            fprintf(fp, "    return 0;\n");
+        }
+
+        fprintf(fp, "}\n\n");
+        i = (end_index < icg->line_count) ? end_index + 1 : icg->line_count;
+    }
+}
+
+static void emit_main_variable_declarations(FILE *fp, const ArcaneSymbolTable *symbols) {
+    int i;
+
+    for (i = 0; i < symbols->count; ++i) {
+        const ArcaneSymbol *symbol = &symbols->entries[i];
+        if (symbol->kind != ARCANE_SYMBOL_VARIABLE) {
+            continue;
+        }
+        if (symbol->owner_function[0] != '\0') {
+            continue;
+        }
+        fprintf(fp, "    %s %s;\n", to_c_type(symbol->type), symbol->name);
+    }
+}
+
+static void emit_main_temps(FILE *fp, const ArcaneSymbolTable *symbols, const ArcaneICG *icg) {
+    int i = 0;
+    char declared[ARCANE_MAX_SYMBOLS][64];
+    int declared_count = 0;
+
+    while (i < icg->line_count) {
+        char lhs_name[64];
+        const char *line = icg->lines[i];
+        char function_name[64];
+
+        if (parse_function_marker(line, "func_begin ", function_name, sizeof(function_name))) {
+            i++;
+            while (i < icg->line_count) {
+                char end_name[64];
+                if (parse_function_marker(icg->lines[i], "func_end ", end_name, sizeof(end_name)) && strcmp(function_name, end_name) == 0) {
+                    break;
+                }
+                i++;
+            }
+            i++;
+            continue;
+        }
+
+        if (!line_is_main_ir(line) || (!should_emit_assignment(line) && !line_is_call_assignment(line))) {
+            i++;
+            continue;
+        }
+
+        if (!extract_lhs_name(line, lhs_name, sizeof(lhs_name))) {
+            i++;
+            continue;
+        }
+        if (is_temp_symbol(lhs_name)) {
+            int seen = 0;
+            int j;
+            for (j = 0; j < declared_count; ++j) {
+                if (strcmp(declared[j], lhs_name) == 0) {
+                    seen = 1;
+                    break;
+                }
+            }
+            if (!seen) {
+            fprintf(fp, "    int %s;\n", lhs_name);
+                if (declared_count < ARCANE_MAX_SYMBOLS) {
+                    strncpy(declared[declared_count], lhs_name, sizeof(declared[declared_count]) - 1);
+                    declared[declared_count][sizeof(declared[declared_count]) - 1] = '\0';
+                    declared_count++;
+                }
+            }
+        }
+        i++;
+    }
+}
+
+static void emit_main_body(FILE *fp, const ArcaneICG *icg) {
+    int i = 0;
+    ArcanePendingArgs pending;
+
+    pending_args_reset(&pending);
+
+    while (i < icg->line_count) {
+        char function_name[64];
+        if (parse_function_marker(icg->lines[i], "func_begin ", function_name, sizeof(function_name))) {
+            i++;
+            while (i < icg->line_count) {
+                char end_name[64];
+                if (parse_function_marker(icg->lines[i], "func_end ", end_name, sizeof(end_name)) && strcmp(function_name, end_name) == 0) {
+                    break;
+                }
+                i++;
+            }
+            i++;
+            continue;
+        }
+
+        emit_ir_line_as_c(fp, icg->lines[i], &pending);
+        i++;
+    }
+}
+
 int generate_c_code(const ArcaneSymbolTable *symbols, const ArcaneICG *icg, const char *output_path) {
     FILE *fp;
-    int index;
+    int i;
 
     if (!symbols || !icg) {
         return -1;
@@ -189,44 +591,24 @@ int generate_c_code(const ArcaneSymbolTable *symbols, const ArcaneICG *icg, cons
         return -2;
     }
 
-    fprintf(fp, "#include <stdio.h>\n");
+    fprintf(fp, "#include <stdio.h>\n\n");
+
+    for (i = 0; i < symbols->count; ++i) {
+        const ArcaneSymbol *symbol = &symbols->entries[i];
+        if (symbol->kind == ARCANE_SYMBOL_FUNCTION && symbol->scope_level == 0 && symbol->owner_function[0] == '\0') {
+            emit_function_signature(fp, symbol, symbols, 1);
+        }
+    }
+
     fprintf(fp, "\n");
+    emit_function_definitions(fp, symbols, icg);
+
     fprintf(fp, "int main() {\n");
-
-    for (index = 0; index < symbols->count; ++index) {
-        const ArcaneSymbol *symbol = &symbols->entries[index];
-        if (symbol->kind == ARCANE_SYMBOL_VARIABLE || symbol->kind == ARCANE_SYMBOL_PARAMETER) {
-            fprintf(fp, "    %s %s;\n", to_c_type(symbol->type), symbol->name);
-        }
-    }
-
-    for (index = 0; index < icg->line_count; ++index) {
-        char lhs_name[64];
-        const char *line = icg->lines[index];
-
-        if (!line || !should_emit_assignment(line)) {
-            continue;
-        }
-
-        if (!extract_lhs_name(line, lhs_name, sizeof(lhs_name))) {
-            continue;
-        }
-
-        if (is_temp_symbol(lhs_name) && !symbol_declared(symbols, lhs_name)) {
-            fprintf(fp, "    int %s;\n", lhs_name);
-        }
-    }
-
-    if (symbols->count > 0) {
-        fprintf(fp, "\n");
-    }
-
-    for (index = 0; index < icg->line_count; ++index) {
-        emit_ir_line_as_c(fp, icg->lines[index]);
-    }
-
+    emit_main_variable_declarations(fp, symbols);
+    emit_main_temps(fp, symbols, icg);
     fprintf(fp, "\n");
-    fprintf(fp, "    return 0;\n");
+    emit_main_body(fp, icg);
+    fprintf(fp, "\n    return 0;\n");
     fprintf(fp, "}\n");
 
     fclose(fp);

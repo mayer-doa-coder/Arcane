@@ -2,9 +2,90 @@
 
 #include <ctype.h>
 #include <limits.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <stdio.h>
+
+#define ARCANE_OPT_MAX_TOKEN 128
+#define ARCANE_OPT_MAX_LINE 512
+
+static size_t line_content_length(const char *line) {
+    if (!line) {
+        return 0;
+    }
+    return strcspn(line, "\r\n");
+}
+
+static void copy_trimmed_line(const char *line, char *out, size_t out_size) {
+    const char *start;
+    size_t len;
+
+    if (!out || out_size == 0) {
+        return;
+    }
+
+    out[0] = '\0';
+    if (!line) {
+        return;
+    }
+
+    start = line;
+    while (*start && isspace((unsigned char)*start)) {
+        start++;
+    }
+
+    len = line_content_length(start);
+    while (len > 0 && isspace((unsigned char)start[len - 1])) {
+        len--;
+    }
+
+    if (len >= out_size) {
+        len = out_size - 1;
+    }
+
+    memcpy(out, start, len);
+    out[len] = '\0';
+}
+
+static int is_identifier_char(char ch) {
+    return isalnum((unsigned char)ch) || ch == '_';
+}
+
+static int is_temp_name(const char *name) {
+    size_t index;
+
+    if (!name || name[0] != 't' || !isdigit((unsigned char)name[1])) {
+        return 0;
+    }
+
+    for (index = 2; name[index] != '\0'; ++index) {
+        if (!isdigit((unsigned char)name[index])) {
+            return 0;
+        }
+    }
+
+    return 1;
+}
+
+static int is_identifier_token(const char *text) {
+    size_t i;
+
+    if (!text || !text[0]) {
+        return 0;
+    }
+
+    if (!(isalpha((unsigned char)text[0]) || text[0] == '_')) {
+        return 0;
+    }
+
+    for (i = 1; text[i] != '\0'; ++i) {
+        if (!is_identifier_char(text[i])) {
+            return 0;
+        }
+    }
+
+    return 1;
+}
 
 static int parse_integer_token(const char *text, int *value_out) {
     char *end_ptr;
@@ -27,32 +108,44 @@ static int parse_integer_token(const char *text, int *value_out) {
     return 1;
 }
 
-static int is_identifier_char(char ch) {
-    return isalnum((unsigned char)ch) || ch == '_';
-}
+static int line_is_unsafe_for_optimization(const char *line) {
+    char trimmed[ARCANE_OPT_MAX_LINE];
+    size_t len;
 
-static int is_temp_name(const char *name) {
-    size_t index;
-
-    if (!name || name[0] != 't') {
-        return 0;
+    copy_trimmed_line(line, trimmed, sizeof(trimmed));
+    len = strlen(trimmed);
+    if (len == 0) {
+        return 1;
     }
 
-    if (!isdigit((unsigned char)name[1])) {
-        return 0;
+    if (trimmed[0] == '#') {
+        return 1;
     }
 
-    for (index = 2; name[index] != '\0'; ++index) {
-        if (!isdigit((unsigned char)name[index])) {
-            return 0;
-        }
+    if (trimmed[len - 1] == ':') {
+        return 1;
     }
 
-    return 1;
+    if (strncmp(trimmed, "goto ", 5) == 0 ||
+        strncmp(trimmed, "ifFalse ", 8) == 0 ||
+        strncmp(trimmed, "func_begin ", 11) == 0 ||
+        strncmp(trimmed, "func_end ", 9) == 0 ||
+        strncmp(trimmed, "param ", 6) == 0 ||
+        strncmp(trimmed, "arg ", 4) == 0 ||
+        strncmp(trimmed, "call ", 5) == 0 ||
+        strncmp(trimmed, "return", 6) == 0 ||
+        strncmp(trimmed, "print ", 6) == 0) {
+        return 1;
+    }
+
+    return 0;
 }
 
 static int parse_assignment_parts(const char *line, char *lhs, size_t lhs_size, char *rhs, size_t rhs_size) {
-    const char *equal_pos;
+    char trimmed[ARCANE_OPT_MAX_LINE];
+    char *equal_pos;
+    char *lhs_end;
+    char *rhs_start;
     size_t lhs_len;
     size_t rhs_len;
 
@@ -60,89 +153,75 @@ static int parse_assignment_parts(const char *line, char *lhs, size_t lhs_size, 
         return 0;
     }
 
-    equal_pos = strchr(line, '=');
+    copy_trimmed_line(line, trimmed, sizeof(trimmed));
+    equal_pos = strchr(trimmed, '=');
     if (!equal_pos) {
         return 0;
     }
 
-    lhs_len = (size_t)(equal_pos - line);
-    if (lhs_len == 0 || lhs_len >= lhs_size) {
+    *equal_pos = '\0';
+    lhs_end = equal_pos - 1;
+    while (lhs_end >= trimmed && isspace((unsigned char)*lhs_end)) {
+        *lhs_end = '\0';
+        lhs_end--;
+    }
+
+    rhs_start = equal_pos + 1;
+    while (*rhs_start && isspace((unsigned char)*rhs_start)) {
+        rhs_start++;
+    }
+
+    lhs_len = strlen(trimmed);
+    rhs_len = strlen(rhs_start);
+    if (lhs_len == 0 || rhs_len == 0 || lhs_len >= lhs_size || rhs_len >= rhs_size) {
         return 0;
     }
 
-    memcpy(lhs, line, lhs_len);
-    lhs[lhs_len] = '\0';
-
-    rhs_len = strcspn(equal_pos + 1, "\r\n");
-    if (rhs_len == 0 || rhs_len >= rhs_size) {
-        return 0;
-    }
-
-    memcpy(rhs, equal_pos + 1, rhs_len);
-    rhs[rhs_len] = '\0';
-
-    if (strchr(lhs, ' ') || strchr(rhs, ' ')) {
-        return 0;
-    }
-
+    memcpy(lhs, trimmed, lhs_len + 1);
+    memcpy(rhs, rhs_start, rhs_len + 1);
     return 1;
 }
 
 static int parse_binary_rhs(const char *rhs, char *left, size_t left_size, char *op, size_t op_size, char *right, size_t right_size) {
-    size_t index;
-    size_t rhs_len;
-    size_t op_len;
-    size_t left_len;
-    size_t right_len;
+    const char *ops[] = {"==", "!=", ">=", "<=", "+", "-", "*", "/", "%", ">", "<"};
+    size_t op_index;
 
-    if (!rhs || !left || !op || !right || left_size == 0 || op_size < 2 || right_size == 0) {
+    if (!rhs || !left || !op || !right || left_size == 0 || op_size == 0 || right_size == 0) {
         return 0;
     }
 
-    rhs_len = strlen(rhs);
-    if (rhs_len < 3) {
-        return 0;
-    }
+    for (op_index = 0; op_index < sizeof(ops) / sizeof(ops[0]); ++op_index) {
+        const char *found = strstr(rhs, ops[op_index]);
+        size_t lhs_len;
+        size_t rhs_len;
+        const char *rhs_part;
 
-    for (index = 1; index < rhs_len; ++index) {
-        char ch = rhs[index];
-
-        if (ch == '+' || ch == '*' || ch == '/' || ch == '%' || ch == '>' || ch == '<' || ch == '=' || ch == '!') {
-            break;
+        if (!found) {
+            continue;
         }
 
-        if (ch == '-') {
-            break;
+        lhs_len = (size_t)(found - rhs);
+        rhs_part = found + strlen(ops[op_index]);
+        while (*rhs_part && isspace((unsigned char)*rhs_part)) {
+            rhs_part++;
         }
+        while (lhs_len > 0 && isspace((unsigned char)rhs[lhs_len - 1])) {
+            lhs_len--;
+        }
+        rhs_len = strlen(rhs_part);
+
+        if (lhs_len == 0 || rhs_len == 0 || lhs_len >= left_size || rhs_len >= right_size || strlen(ops[op_index]) >= op_size) {
+            continue;
+        }
+
+        memcpy(left, rhs, lhs_len);
+        left[lhs_len] = '\0';
+        memcpy(op, ops[op_index], strlen(ops[op_index]) + 1);
+        memcpy(right, rhs_part, rhs_len + 1);
+        return 1;
     }
 
-    if (index >= rhs_len) {
-        return 0;
-    }
-
-    op_len = 1;
-    if ((rhs[index] == '>' || rhs[index] == '<' || rhs[index] == '=' || rhs[index] == '!') &&
-        (index + 1 < rhs_len) && rhs[index + 1] == '=') {
-        op_len = 2;
-    }
-
-    left_len = index;
-    right_len = rhs_len - index - op_len;
-
-    if (left_len == 0 || right_len == 0 || left_len >= left_size || right_len >= right_size || op_len >= op_size) {
-        return 0;
-    }
-
-    memcpy(left, rhs, left_len);
-    left[left_len] = '\0';
-
-    memcpy(op, rhs + index, op_len);
-    op[op_len] = '\0';
-
-    memcpy(right, rhs + index + op_len, right_len);
-    right[right_len] = '\0';
-
-    return 1;
+    return 0;
 }
 
 static int eval_binary_int(int left, int right, const char *op, int *result_out) {
@@ -204,15 +283,15 @@ static int eval_binary_int(int left, int right, const char *op, int *result_out)
     return 0;
 }
 
-static int replace_line_with_assignment(char **line_ptr, const char *lhs, const char *rhs) {
+static int replace_line_with_text(char **line_ptr, const char *new_line_without_newline) {
     int required;
     char *replacement;
 
-    if (!line_ptr || !*line_ptr || !lhs || !rhs) {
+    if (!line_ptr || !new_line_without_newline) {
         return 0;
     }
 
-    required = snprintf(NULL, 0, "%s=%s\n", lhs, rhs);
+    required = snprintf(NULL, 0, "%s\n", new_line_without_newline);
     if (required <= 0) {
         return 0;
     }
@@ -222,34 +301,28 @@ static int replace_line_with_assignment(char **line_ptr, const char *lhs, const 
         return 0;
     }
 
-    snprintf(replacement, (size_t)required + 1, "%s=%s\n", lhs, rhs);
+    snprintf(replacement, (size_t)required + 1, "%s\n", new_line_without_newline);
     free(*line_ptr);
     *line_ptr = replacement;
     return 1;
 }
 
+static int replace_line_with_assignment(char **line_ptr, const char *lhs, const char *rhs) {
+    char buffer[ARCANE_OPT_MAX_LINE];
+
+    if (!lhs || !rhs) {
+        return 0;
+    }
+
+    snprintf(buffer, sizeof(buffer), "%s=%s", lhs, rhs);
+    return replace_line_with_text(line_ptr, buffer);
+}
+
 static int replace_line_with_int(char **line_ptr, const char *lhs, int value) {
-    int required;
-    char *replacement;
+    char buffer[ARCANE_OPT_MAX_LINE];
 
-    if (!line_ptr || !*line_ptr || !lhs) {
-        return 0;
-    }
-
-    required = snprintf(NULL, 0, "%s=%d\n", lhs, value);
-    if (required <= 0) {
-        return 0;
-    }
-
-    replacement = (char *)malloc((size_t)required + 1);
-    if (!replacement) {
-        return 0;
-    }
-
-    snprintf(replacement, (size_t)required + 1, "%s=%d\n", lhs, value);
-    free(*line_ptr);
-    *line_ptr = replacement;
-    return 1;
+    snprintf(buffer, sizeof(buffer), "%s=%d", lhs, value);
+    return replace_line_with_text(line_ptr, buffer);
 }
 
 static int line_uses_identifier(const char *line, const char *identifier) {
@@ -277,24 +350,40 @@ static int line_uses_identifier(const char *line, const char *identifier) {
     return 0;
 }
 
-void optimizer_constant_folding(ArcaneICG *icg) {
+static int line_redefines_identifier(const char *line, const char *identifier) {
+    char lhs[ARCANE_OPT_MAX_TOKEN];
+    char rhs[ARCANE_OPT_MAX_LINE];
+
+    if (!identifier || !identifier[0]) {
+        return 0;
+    }
+
+    if (!parse_assignment_parts(line, lhs, sizeof(lhs), rhs, sizeof(rhs))) {
+        return 0;
+    }
+
+    return strcmp(lhs, identifier) == 0;
+}
+
+static int pass_constant_folding(ArcaneICG *icg) {
     int line_index;
+    int changed = 0;
 
     if (!icg || !icg->lines) {
-        return;
+        return 0;
     }
 
     for (line_index = 0; line_index < icg->line_count; ++line_index) {
-        char lhs[64];
-        char rhs[256];
-        char left[128];
-        char right[128];
+        char lhs[ARCANE_OPT_MAX_TOKEN];
+        char rhs[ARCANE_OPT_MAX_LINE];
+        char left[ARCANE_OPT_MAX_TOKEN];
+        char right[ARCANE_OPT_MAX_TOKEN];
         char op[3];
         int left_value;
         int right_value;
         int folded_value;
 
-        if (!icg->lines[line_index]) {
+        if (!icg->lines[line_index] || line_is_unsafe_for_optimization(icg->lines[line_index])) {
             continue;
         }
 
@@ -314,25 +403,30 @@ void optimizer_constant_folding(ArcaneICG *icg) {
             continue;
         }
 
-        (void)replace_line_with_int(&icg->lines[line_index], lhs, folded_value);
+        if (replace_line_with_int(&icg->lines[line_index], lhs, folded_value)) {
+            changed = 1;
+        }
     }
+
+    return changed;
 }
 
-void optimizer_algebraic_simplification(ArcaneICG *icg) {
+static int pass_algebraic_simplification(ArcaneICG *icg) {
     int line_index;
+    int changed = 0;
 
     if (!icg || !icg->lines) {
-        return;
+        return 0;
     }
 
     for (line_index = 0; line_index < icg->line_count; ++line_index) {
-        char lhs[64];
-        char rhs[256];
-        char left[128];
-        char right[128];
+        char lhs[ARCANE_OPT_MAX_TOKEN];
+        char rhs[ARCANE_OPT_MAX_LINE];
+        char left[ARCANE_OPT_MAX_TOKEN];
+        char right[ARCANE_OPT_MAX_TOKEN];
         char op[3];
 
-        if (!icg->lines[line_index]) {
+        if (!icg->lines[line_index] || line_is_unsafe_for_optimization(icg->lines[line_index])) {
             continue;
         }
 
@@ -346,64 +440,117 @@ void optimizer_algebraic_simplification(ArcaneICG *icg) {
 
         if (strcmp(op, "+") == 0) {
             if (strcmp(right, "0") == 0) {
-                (void)replace_line_with_assignment(&icg->lines[line_index], lhs, left);
+                changed |= replace_line_with_assignment(&icg->lines[line_index], lhs, left);
                 continue;
             }
             if (strcmp(left, "0") == 0) {
-                (void)replace_line_with_assignment(&icg->lines[line_index], lhs, right);
+                changed |= replace_line_with_assignment(&icg->lines[line_index], lhs, right);
                 continue;
             }
         }
 
-        if (strcmp(op, "-") == 0) {
-            if (strcmp(right, "0") == 0) {
-                (void)replace_line_with_assignment(&icg->lines[line_index], lhs, left);
-                continue;
-            }
+        if (strcmp(op, "-") == 0 && strcmp(right, "0") == 0) {
+            changed |= replace_line_with_assignment(&icg->lines[line_index], lhs, left);
+            continue;
         }
 
         if (strcmp(op, "*") == 0) {
             if (strcmp(right, "1") == 0) {
-                (void)replace_line_with_assignment(&icg->lines[line_index], lhs, left);
+                changed |= replace_line_with_assignment(&icg->lines[line_index], lhs, left);
                 continue;
             }
             if (strcmp(left, "1") == 0) {
-                (void)replace_line_with_assignment(&icg->lines[line_index], lhs, right);
+                changed |= replace_line_with_assignment(&icg->lines[line_index], lhs, right);
                 continue;
             }
-            if (strcmp(right, "0") == 0 || strcmp(left, "0") == 0) {
-                (void)replace_line_with_int(&icg->lines[line_index], lhs, 0);
+            if (strcmp(left, "0") == 0 || strcmp(right, "0") == 0) {
+                changed |= replace_line_with_int(&icg->lines[line_index], lhs, 0);
                 continue;
             }
         }
 
-        if (strcmp(op, "/") == 0) {
-            if (strcmp(right, "1") == 0) {
-                (void)replace_line_with_assignment(&icg->lines[line_index], lhs, left);
-                continue;
-            }
+        if (strcmp(op, "/") == 0 && strcmp(right, "1") == 0) {
+            changed |= replace_line_with_assignment(&icg->lines[line_index], lhs, left);
+            continue;
         }
     }
+
+    return changed;
 }
 
-void optimizer_dead_temp_elimination(ArcaneICG *icg) {
-    int line_index;
+static int pass_copy_propagation(ArcaneICG *icg) {
+    int i;
+    int changed = 0;
 
     if (!icg || !icg->lines) {
-        return;
+        return 0;
     }
 
-    for (line_index = 0; line_index < icg->line_count; ++line_index) {
-        int later_index;
-        int used_later = 0;
-        char lhs[64];
-        char rhs[256];
+    for (i = 0; i < icg->line_count; ++i) {
+        char lhs[ARCANE_OPT_MAX_TOKEN];
+        char rhs[ARCANE_OPT_MAX_LINE];
+        int j;
 
-        if (!icg->lines[line_index]) {
+        if (!icg->lines[i] || line_is_unsafe_for_optimization(icg->lines[i])) {
             continue;
         }
 
-        if (!parse_assignment_parts(icg->lines[line_index], lhs, sizeof(lhs), rhs, sizeof(rhs))) {
+        if (!parse_assignment_parts(icg->lines[i], lhs, sizeof(lhs), rhs, sizeof(rhs))) {
+            continue;
+        }
+
+        if (!is_identifier_token(rhs)) {
+            continue;
+        }
+
+        for (j = i + 1; j < icg->line_count; ++j) {
+            char use_lhs[ARCANE_OPT_MAX_TOKEN];
+            char use_rhs[ARCANE_OPT_MAX_LINE];
+
+            if (!icg->lines[j]) {
+                continue;
+            }
+
+            if (line_is_unsafe_for_optimization(icg->lines[j])) {
+                break;
+            }
+
+            if (line_redefines_identifier(icg->lines[j], lhs) || line_redefines_identifier(icg->lines[j], rhs)) {
+                break;
+            }
+
+            if (!parse_assignment_parts(icg->lines[j], use_lhs, sizeof(use_lhs), use_rhs, sizeof(use_rhs))) {
+                continue;
+            }
+
+            if (strcmp(use_rhs, lhs) == 0) {
+                changed |= replace_line_with_assignment(&icg->lines[j], use_lhs, rhs);
+            }
+        }
+    }
+
+    return changed;
+}
+
+static int pass_dead_code_elimination(ArcaneICG *icg) {
+    int i;
+    int changed = 0;
+
+    if (!icg || !icg->lines) {
+        return 0;
+    }
+
+    for (i = 0; i < icg->line_count; ++i) {
+        int j;
+        int used_later = 0;
+        char lhs[ARCANE_OPT_MAX_TOKEN];
+        char rhs[ARCANE_OPT_MAX_LINE];
+
+        if (!icg->lines[i] || line_is_unsafe_for_optimization(icg->lines[i])) {
+            continue;
+        }
+
+        if (!parse_assignment_parts(icg->lines[i], lhs, sizeof(lhs), rhs, sizeof(rhs))) {
             continue;
         }
 
@@ -411,25 +558,64 @@ void optimizer_dead_temp_elimination(ArcaneICG *icg) {
             continue;
         }
 
-        for (later_index = line_index + 1; later_index < icg->line_count; ++later_index) {
-            if (!icg->lines[later_index]) {
+        for (j = i + 1; j < icg->line_count; ++j) {
+            if (!icg->lines[j]) {
                 continue;
             }
-            if (line_uses_identifier(icg->lines[later_index], lhs)) {
+
+            if (line_uses_identifier(icg->lines[j], lhs)) {
                 used_later = 1;
+                break;
+            }
+
+            if (line_redefines_identifier(icg->lines[j], lhs)) {
                 break;
             }
         }
 
         if (!used_later) {
-            free(icg->lines[line_index]);
-            icg->lines[line_index] = NULL;
+            free(icg->lines[i]);
+            icg->lines[i] = NULL;
+            changed = 1;
         }
     }
+
+    return changed;
+}
+
+void optimizer_constant_folding(ArcaneICG *icg) {
+    (void)pass_constant_folding(icg);
+    (void)pass_algebraic_simplification(icg);
+}
+
+void optimizer_copy_propagation(ArcaneICG *icg) {
+    (void)pass_copy_propagation(icg);
+}
+
+void optimizer_dead_code_elimination(ArcaneICG *icg) {
+    (void)pass_dead_code_elimination(icg);
 }
 
 void optimizer_run_all(ArcaneICG *icg) {
-    optimizer_constant_folding(icg);
-    optimizer_algebraic_simplification(icg);
-    optimizer_dead_temp_elimination(icg);
+    int changed;
+    int iteration = 0;
+    int max_iterations;
+
+    if (!icg) {
+        return;
+    }
+
+    max_iterations = (icg->line_count > 0 ? icg->line_count * 4 : 16);
+    if (max_iterations < 16) {
+        max_iterations = 16;
+    }
+
+    do {
+        changed = 0;
+        changed |= pass_constant_folding(icg);
+        changed |= pass_algebraic_simplification(icg);
+        changed |= pass_copy_propagation(icg);
+        changed |= pass_dead_code_elimination(icg);
+        iteration++;
+    } while (changed && iteration < max_iterations);
 }

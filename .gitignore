@@ -1,0 +1,25 @@
+# Generated lexer/parser artifacts
+/lex.yy.c
+/wizard.tab.c
+/wizard.tab.h
+/lexer/lex.yy.c
+/lexer/wizard_lexer.exe
+/parser/wizard.tab.c
+/parser/wizard.tab.h
+/parser/wizard_parser.exe
+
+# Build outputs and runtime artifacts
+/output/*
+!/output/.gitkeep
+*.exe
+*.log
+
+# Grading and baseline generated artifacts
+/grading_artifacts/*
+!/grading_artifacts/.gitkeep
+/baseline/*
+!/baseline/.gitkeep
+
+# Common local clutter
+*.tmp
+*.bak

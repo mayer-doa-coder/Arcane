@@ -27,6 +27,13 @@ void icg_emit_assign(ArcaneICG *icg, const char *target, const char *source);
 void icg_emit_label(ArcaneICG *icg, const char *label);
 void icg_emit_goto(ArcaneICG *icg, const char *label);
 void icg_emit_if_false(ArcaneICG *icg, const char *condition_place, const char *label);
+void icg_emit_func_begin(ArcaneICG *icg, const char *function_name);
+void icg_emit_func_end(ArcaneICG *icg, const char *function_name);
+void icg_emit_param(ArcaneICG *icg, const char *param_name);
+void icg_emit_arg(ArcaneICG *icg, const char *arg_place);
+void icg_emit_call(ArcaneICG *icg, const char *function_name, int arg_count);
+void icg_emit_call_assign(ArcaneICG *icg, const char *target, const char *function_name, int arg_count);
+void icg_emit_return(ArcaneICG *icg, const char *value_place);
 void print_icg(const ArcaneICG *icg, FILE *output);
 
 #endif

@@ -3,6 +3,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <stdarg.h>
 #include "../lexer/tokens.h"
 #include "../symbol_table/symbol_table.h"
 #include "../icg/icg.h"
@@ -15,6 +16,7 @@ int yyparse(void);
 
 #ifdef USE_FLEX_LEXER
 extern FILE *yyin;
+extern int yylineno;
 #else
 FILE *yyin = NULL;
 #endif
@@ -26,6 +28,40 @@ ArcaneICG g_icg;
 char *loop_start_stack[64];
 char *loop_end_stack[64];
 int loop_stack_top = -1;
+static char *emit_binary_temp(const char *op, char *left, char *right);
+
+typedef struct {
+	char *place;
+	ArcaneType type;
+	int valid;
+} ArcaneExprSem;
+
+typedef struct {
+	int count;
+	ArcaneType types[ARCANE_MAX_FUNCTION_PARAMS];
+	char *places[ARCANE_MAX_FUNCTION_PARAMS];
+	int valid;
+} ArcaneArgSem;
+
+typedef struct {
+	int count;
+	char *names[ARCANE_MAX_FUNCTION_PARAMS];
+	ArcaneType types[ARCANE_MAX_FUNCTION_PARAMS];
+	int valid;
+} ArcaneParamSem;
+
+static int semantic_error_count = 0;
+#ifndef USE_FLEX_LEXER
+static int g_manual_line = 1;
+#endif
+
+static int semantic_line(void) {
+#ifdef USE_FLEX_LEXER
+	return yylineno;
+#else
+	return g_manual_line;
+#endif
+}
 
 static char *arcane_strdup(const char *text) {
 	size_t len;
@@ -49,13 +85,364 @@ static void sync_symbol_context(void) {
 	arcane_symbol_set_context(current_scope_level, current_function_name, (ArcaneHouse)current_house);
 }
 
+static void report_semantic_errorf(const char *format, ...) {
+	va_list args;
+
+	semantic_error_count++;
+	fprintf(stderr, "Semantic Error (line %d): ", semantic_line());
+	va_start(args, format);
+	vfprintf(stderr, format, args);
+	va_end(args);
+	fprintf(stderr, "\n");
+}
+
 static void report_semantic_error(const char *message, const char *name) {
 	if (name && name[0] != '\0') {
-		fprintf(stderr, "Semantic error: %s %s\n", message, name);
+		report_semantic_errorf("%s %s", message, name);
 		return;
 	}
 
-	fprintf(stderr, "Semantic error: %s\n", message);
+	report_semantic_errorf("%s", message);
+}
+
+static int arcane_type_is_numeric(ArcaneType type) {
+	return type == ARCANE_TYPE_INT || type == ARCANE_TYPE_FLOAT || type == ARCANE_TYPE_DOUBLE ||
+		type == ARCANE_TYPE_LONG || type == ARCANE_TYPE_CHAR;
+}
+
+static int arcane_type_is_integral(ArcaneType type) {
+	return type == ARCANE_TYPE_INT || type == ARCANE_TYPE_LONG || type == ARCANE_TYPE_CHAR;
+}
+
+static ArcaneType arcane_numeric_result_type(ArcaneType left, ArcaneType right) {
+	if (left == ARCANE_TYPE_DOUBLE || right == ARCANE_TYPE_DOUBLE) {
+		return ARCANE_TYPE_DOUBLE;
+	}
+	if (left == ARCANE_TYPE_FLOAT || right == ARCANE_TYPE_FLOAT) {
+		return ARCANE_TYPE_FLOAT;
+	}
+	if (left == ARCANE_TYPE_LONG || right == ARCANE_TYPE_LONG) {
+		return ARCANE_TYPE_LONG;
+	}
+	return ARCANE_TYPE_INT;
+}
+
+static int arcane_assignment_compatible(ArcaneType destination, ArcaneType source) {
+	if (destination == source) {
+		return 1;
+	}
+
+	if (destination == ARCANE_TYPE_BOOL && source == ARCANE_TYPE_BOOL) {
+		return 1;
+	}
+
+	if (arcane_type_is_numeric(destination) && arcane_type_is_numeric(source)) {
+		ArcaneType promoted = arcane_numeric_result_type(destination, source);
+		return promoted == destination;
+	}
+
+	return 0;
+}
+
+static ArcaneExprSem arcane_expr_invalid(void) {
+	ArcaneExprSem expr;
+
+	expr.place = icg_dup_text("0");
+	expr.type = ARCANE_TYPE_UNKNOWN;
+	expr.valid = 0;
+	return expr;
+}
+
+static ArcaneExprSem arcane_expr_make(char *place, ArcaneType type, int valid) {
+	ArcaneExprSem expr;
+
+	expr.place = place;
+	expr.type = type;
+	expr.valid = valid;
+	return expr;
+}
+
+static ArcaneExprSem arcane_expr_identifier(const char *name) {
+	int symbol_index;
+	ArcaneType symbol_type;
+	int initialized = 0;
+
+	symbol_index = lookup_symbol(name);
+	if (symbol_index < 0) {
+		report_semantic_error("undeclared variable", name);
+		return arcane_expr_invalid();
+	}
+
+	if (arcane_symbol_get_type(name, &symbol_type) != ARCANE_SYMBOL_OK) {
+		symbol_type = ARCANE_TYPE_UNKNOWN;
+	}
+
+	if (arcane_symbol_get_initialized(name, &initialized) == ARCANE_SYMBOL_OK) {
+		if (!initialized) {
+			report_semantic_errorf("Variable '%s' used before initialization", name);
+		}
+	}
+
+	(void)arcane_symbol_mark_used(name);
+	return arcane_expr_make(icg_dup_text(name), symbol_type, initialized != 0);
+}
+
+static ArcaneExprSem arcane_expr_binary_numeric(const char *op, ArcaneExprSem left, ArcaneExprSem right) {
+	ArcaneType result_type;
+
+	if (!left.valid || !right.valid) {
+		free(left.place);
+		free(right.place);
+		return arcane_expr_invalid();
+	}
+
+	if (!arcane_type_is_numeric(left.type) || !arcane_type_is_numeric(right.type)) {
+		report_semantic_errorf("Invalid operand types for '%s': %s and %s", op, arcane_type_name(left.type), arcane_type_name(right.type));
+		free(left.place);
+		free(right.place);
+		return arcane_expr_invalid();
+	}
+
+	result_type = arcane_numeric_result_type(left.type, right.type);
+	return arcane_expr_make(emit_binary_temp(op, left.place, right.place), result_type, 1);
+}
+
+static ArcaneExprSem arcane_expr_binary_compare(const char *op, ArcaneExprSem left, ArcaneExprSem right) {
+	if (!left.valid || !right.valid) {
+		free(left.place);
+		free(right.place);
+		return arcane_expr_invalid();
+	}
+
+	if (!arcane_type_is_numeric(left.type) || !arcane_type_is_numeric(right.type)) {
+		report_semantic_errorf("Invalid comparison operand types for '%s': %s and %s", op, arcane_type_name(left.type), arcane_type_name(right.type));
+		free(left.place);
+		free(right.place);
+		return arcane_expr_invalid();
+	}
+
+	return arcane_expr_make(emit_binary_temp(op, left.place, right.place), ARCANE_TYPE_BOOL, 1);
+}
+
+static ArcaneArgSem arcane_args_empty(void) {
+	ArcaneArgSem args;
+	int i;
+
+	args.count = 0;
+	args.valid = 1;
+	for (i = 0; i < ARCANE_MAX_FUNCTION_PARAMS; ++i) {
+		args.places[i] = NULL;
+	}
+	return args;
+}
+
+static void arcane_args_release(ArcaneArgSem *args) {
+	int i;
+
+	if (!args) {
+		return;
+	}
+
+	for (i = 0; i < args->count; ++i) {
+		free(args->places[i]);
+		args->places[i] = NULL;
+	}
+	args->count = 0;
+	args->valid = 0;
+}
+
+static ArcaneArgSem arcane_args_append(ArcaneArgSem args, ArcaneType type, char *place, int value_valid) {
+	if (!value_valid) {
+		args.valid = 0;
+	}
+
+	if (args.count < ARCANE_MAX_FUNCTION_PARAMS) {
+		args.types[args.count++] = type;
+		args.places[args.count - 1] = place;
+	} else {
+		report_semantic_errorf("Too many arguments in function call (max %d)", ARCANE_MAX_FUNCTION_PARAMS);
+		args.valid = 0;
+		free(place);
+	}
+
+	return args;
+}
+
+static ArcaneParamSem arcane_params_empty(void) {
+	ArcaneParamSem params;
+	int i;
+
+	params.count = 0;
+	params.valid = 1;
+	for (i = 0; i < ARCANE_MAX_FUNCTION_PARAMS; ++i) {
+		params.names[i] = NULL;
+		params.types[i] = ARCANE_TYPE_UNKNOWN;
+	}
+	return params;
+}
+
+static void arcane_params_release(ArcaneParamSem *params) {
+	int i;
+
+	if (!params) {
+		return;
+	}
+
+	for (i = 0; i < params->count; ++i) {
+		free(params->names[i]);
+		params->names[i] = NULL;
+	}
+	params->count = 0;
+	params->valid = 0;
+}
+
+static ArcaneParamSem arcane_params_append(ArcaneParamSem params, char *name, ArcaneType type) {
+	int i;
+
+	if (!name) {
+		params.valid = 0;
+		return params;
+	}
+
+	for (i = 0; i < params.count; ++i) {
+		if (strcmp(params.names[i], name) == 0) {
+			report_semantic_errorf("duplicate parameter %s", name);
+			params.valid = 0;
+			free(name);
+			return params;
+		}
+	}
+
+	if (params.count >= ARCANE_MAX_FUNCTION_PARAMS) {
+		report_semantic_errorf("Too many function parameters (max %d)", ARCANE_MAX_FUNCTION_PARAMS);
+		params.valid = 0;
+		free(name);
+		return params;
+	}
+
+	params.names[params.count] = name;
+	params.types[params.count] = type;
+	params.count++;
+	return params;
+}
+
+static ArcaneType arcane_validate_function_call(const char *name, ArcaneArgSem args, int used_in_expression) {
+	int i;
+	int expected_arity;
+	ArcaneType expected_param_types[ARCANE_MAX_FUNCTION_PARAMS];
+	ArcaneType return_type = ARCANE_TYPE_UNKNOWN;
+
+	if (arcane_symbol_get_function_signature(name, &return_type, &expected_arity, expected_param_types, ARCANE_MAX_FUNCTION_PARAMS) != ARCANE_SYMBOL_OK) {
+		report_semantic_error("undeclared function", name);
+		return ARCANE_TYPE_UNKNOWN;
+	}
+
+	if (expected_arity != args.count) {
+		report_semantic_errorf("Function '%s' expects %d argument(s) but got %d", name, expected_arity, args.count);
+	}
+
+	for (i = 0; i < args.count && i < expected_arity; ++i) {
+		if (expected_param_types[i] == ARCANE_TYPE_UNKNOWN || args.types[i] == ARCANE_TYPE_UNKNOWN) {
+			continue;
+		}
+		if (!arcane_assignment_compatible(expected_param_types[i], args.types[i])) {
+			report_semantic_errorf(
+				"Type mismatch in function call argument %d for '%s': expected %s but got %s",
+				i + 1,
+				name,
+				arcane_type_name(expected_param_types[i]),
+				arcane_type_name(args.types[i])
+			);
+		}
+	}
+
+	if (!args.valid) {
+		report_semantic_errorf("Invalid argument list in call to '%s'", name);
+	}
+
+	if (used_in_expression && return_type == ARCANE_TYPE_VOID) {
+		report_semantic_errorf("Function '%s' returns VOID and cannot be used in an expression", name);
+	}
+
+	return return_type;
+}
+
+static void arcane_begin_function_declaration(const char *name, ArcaneType return_type, ArcaneParamSem params) {
+	int existing_index;
+	int i;
+	ArcaneType existing_return_type;
+	int existing_param_count;
+	ArcaneType existing_param_types[ARCANE_MAX_FUNCTION_PARAMS];
+
+	sync_symbol_context();
+	existing_index = arcane_find_global_function(name);
+	if (existing_index >= 0) {
+		if (arcane_symbol_get_function_signature(name, &existing_return_type, &existing_param_count, existing_param_types, ARCANE_MAX_FUNCTION_PARAMS) == ARCANE_SYMBOL_OK) {
+			int consistent = 1;
+			if (existing_return_type != return_type || existing_param_count != params.count) {
+				consistent = 0;
+			} else {
+				for (i = 0; i < params.count; ++i) {
+					if (existing_param_types[i] != params.types[i]) {
+						consistent = 0;
+						break;
+					}
+				}
+			}
+
+			if (consistent) {
+				report_semantic_errorf("duplicate function declaration '%s'", name);
+			} else {
+				report_semantic_errorf("inconsistent redeclaration of function '%s'", name);
+			}
+		}
+	} else {
+		int function_insert_result;
+		function_insert_result = arcane_insert_symbol(name, ARCANE_SYMBOL_FUNCTION, return_type, (ArcaneHouse)current_house, 0, "", 0);
+		if (function_insert_result != ARCANE_SYMBOL_OK) {
+			report_semantic_error("duplicate function", name);
+		} else {
+			(void)arcane_symbol_set_function_signature(name, return_type, params.count, params.types);
+		}
+	}
+
+	arcane_copy_text(current_function_name, sizeof(current_function_name), name);
+	current_scope_level = 1;
+	sync_symbol_context();
+	icg_emit_func_begin(&g_icg, current_function_name);
+
+	for (i = 0; i < params.count; ++i) {
+		int parameter_insert_result = arcane_insert_symbol(
+			params.names[i],
+			ARCANE_SYMBOL_PARAMETER,
+			params.types[i],
+			(ArcaneHouse)current_house,
+			current_scope_level,
+			current_function_name,
+			0
+		);
+		if (parameter_insert_result == ARCANE_SYMBOL_DUPLICATE) {
+			report_semantic_error("duplicate parameter", params.names[i]);
+		}
+		icg_emit_param(&g_icg, params.names[i]);
+	}
+}
+
+static ArcaneExprSem arcane_expr_binary_logic(const char *op, ArcaneExprSem left, ArcaneExprSem right) {
+	if (!left.valid || !right.valid) {
+		free(left.place);
+		free(right.place);
+		return arcane_expr_invalid();
+	}
+
+	if (left.type != ARCANE_TYPE_BOOL || right.type != ARCANE_TYPE_BOOL) {
+		report_semantic_errorf("Invalid logical operand types for '%s': %s and %s", op, arcane_type_name(left.type), arcane_type_name(right.type));
+		free(left.place);
+		free(right.place);
+		return arcane_expr_invalid();
+	}
+
+	return arcane_expr_make(emit_binary_temp(op, left.place, right.place), ARCANE_TYPE_BOOL, 1);
 }
 
 static char *emit_binary_temp(const char *op, char *left, char *right) {
@@ -125,6 +512,9 @@ static int scan_char(void);
 %union {
 	int ival;
 	char *sval;
+	ArcaneExprSem expr;
+	ArcaneArgSem args;
+	ArcaneParamSem params;
 }
 
 %token ENTER_HOGWARTS EXIT_HOGWARTS HOUSE ENDHOUSE
@@ -142,7 +532,10 @@ static int scan_char(void);
 %token EQ NE GE LE
 
 %type <ival> type_spec
-%type <sval> init_opt expr expression
+%type <ival> function_return_opt
+%type <expr> init_opt expr expression expression_opt
+%type <args> arg_list_opt arg_list
+%type <params> param_list_opt param_list param_decl
 
 %left OR XOR
 %left AND
@@ -218,60 +611,50 @@ sorting_hat_block:
 ;
 
 function:
-	  SPELL IDENTIFIER
+	  SPELL IDENTIFIER function_return_opt WITH '(' param_list_opt ')'
 	  {
-		int function_insert_result;
-		function_insert_result = arcane_insert_symbol($2, ARCANE_SYMBOL_FUNCTION, ARCANE_TYPE_VOID, (ArcaneHouse)current_house, 0, "", 0);
-		if (function_insert_result == ARCANE_SYMBOL_DUPLICATE) {
-			report_semantic_error("duplicate function", $2);
-		}
-		arcane_copy_text(current_function_name, sizeof(current_function_name), $2);
-		current_scope_level = 1;
-		sync_symbol_context();
-		free($2);
-	  }
-	  WITH '(' id_list_opt ')' HOUSE statements ENDSPELL
-	  {
-		current_scope_level = 0;
-		current_function_name[0] = '\0';
-		sync_symbol_context();
-	  }
-	| SPELL IDENTIFIER
-	  {
-		int function_insert_result;
-		function_insert_result = arcane_insert_symbol($2, ARCANE_SYMBOL_FUNCTION, ARCANE_TYPE_VOID, (ArcaneHouse)current_house, 0, "", 0);
-		if (function_insert_result == ARCANE_SYMBOL_DUPLICATE) {
-			report_semantic_error("duplicate function", $2);
-		}
-		arcane_copy_text(current_function_name, sizeof(current_function_name), $2);
-		current_scope_level = 1;
-		sync_symbol_context();
+		arcane_begin_function_declaration($2, (ArcaneType)$3, $6);
+		arcane_params_release(&$6);
 		free($2);
 	  }
 	  HOUSE statements ENDSPELL
 	  {
+		icg_emit_func_end(&g_icg, current_function_name);
 		current_scope_level = 0;
 		current_function_name[0] = '\0';
 		sync_symbol_context();
 	  }
-	| SPELL IDENTIFIER
+	| SPELL IDENTIFIER function_return_opt
 	  {
-		int function_insert_result;
-		function_insert_result = arcane_insert_symbol($2, ARCANE_SYMBOL_FUNCTION, ARCANE_TYPE_VOID, (ArcaneHouse)current_house, 0, "", 0);
-		if (function_insert_result == ARCANE_SYMBOL_DUPLICATE) {
-			report_semantic_error("duplicate function", $2);
-		}
-		arcane_copy_text(current_function_name, sizeof(current_function_name), $2);
-		current_scope_level = 1;
+		ArcaneParamSem no_params = arcane_params_empty();
+		arcane_begin_function_declaration($2, (ArcaneType)$3, no_params);
+		free($2);
+	  }
+	  HOUSE statements ENDSPELL
+	  {
+		icg_emit_func_end(&g_icg, current_function_name);
+		current_scope_level = 0;
+		current_function_name[0] = '\0';
 		sync_symbol_context();
+	  }
+	| SPELL IDENTIFIER function_return_opt
+	  {
+		ArcaneParamSem no_params = arcane_params_empty();
+		arcane_begin_function_declaration($2, (ArcaneType)$3, no_params);
 		free($2);
 	  }
 	  statements ENDSPELL
 	  {
+		icg_emit_func_end(&g_icg, current_function_name);
 		current_scope_level = 0;
 		current_function_name[0] = '\0';
 		sync_symbol_context();
 	  }
+;
+
+function_return_opt:
+	  AS type_spec { $$ = $2; }
+	| { $$ = ARCANE_TYPE_VOID; }
 ;
 
 semantic_checks:
@@ -308,23 +691,29 @@ declaration:
 	DECLARE IDENTIFIER AS type_spec init_opt ';'
 	{
 		int declaration_result;
+		int symbol_index;
+		ArcaneType lhs_type;
 		sync_symbol_context();
 		if (current_house != 1) {
-			fprintf(stderr, "Semantic error: declaration is only allowed in Gryffindor (current: %s)\n", house_name_from_id(current_house));
+			report_semantic_errorf("declaration is only allowed in Gryffindor (current: %s)", house_name_from_id(current_house));
 		}
 
 		declaration_result = arcane_insert_variable($2, (ArcaneType)$4, (ArcaneHouse)current_house, current_scope_level, current_function_name, 0);
 		if (declaration_result == ARCANE_SYMBOL_DUPLICATE) {
 			report_semantic_error("duplicate variable", $2);
 		}
-		if ($5 && declaration_result == ARCANE_SYMBOL_OK) {
-			int symbol_index = lookup_symbol($2);
-			if (symbol_index >= 0) {
+
+		if ($5.valid && declaration_result == ARCANE_SYMBOL_OK) {
+			symbol_index = lookup_symbol($2);
+			lhs_type = (ArcaneType)$4;
+			if (!arcane_assignment_compatible(lhs_type, $5.type)) {
+				report_semantic_errorf("Type mismatch in assignment to '%s': %s <- %s", $2, arcane_type_name(lhs_type), arcane_type_name($5.type));
+			} else if (symbol_index >= 0) {
 				arcane_symbol_table_mark_initialized(&g_arcane_symbol_table, symbol_index);
+				icg_emit_assign(&g_icg, $2, $5.place);
 			}
-			icg_emit_assign(&g_icg, $2, $5);
 		}
-		free($5);
+		free($5.place);
 		free($2);
 	}
 	| DECLARE IDENTIFIER AS INT '=' NUMBER opt_semi
@@ -332,7 +721,7 @@ declaration:
 		char *literal_value;
 		sync_symbol_context();
 		if (current_house != 1) {
-			fprintf(stderr, "Semantic error: declaration is only allowed in Gryffindor (current: %s)\n", house_name_from_id(current_house));
+			report_semantic_errorf("declaration is only allowed in Gryffindor (current: %s)", house_name_from_id(current_house));
 		}
 
 		if (insert_symbol($2, ARCANE_TYPE_INT, $6) == ARCANE_SYMBOL_DUPLICATE) {
@@ -360,42 +749,96 @@ type_spec:
 
 init_opt:
 	  INIT_ASSIGN expression { $$ = $2; }
-	| { $$ = NULL; }
+	| {
+		$$.place = NULL;
+		$$.type = ARCANE_TYPE_UNKNOWN;
+		$$.valid = 0;
+	}
 ;
 
 assignment:
-	  IDENTIFIER '=' expr ';'
+	  IDENTIFIER '=' expression ';'
 	  {
+		int symbol_index;
+		ArcaneType lhs_type;
+		symbol_index = -1;
 		sync_symbol_context();
-		if (lookup_symbol($1) < 0) {
+		symbol_index = lookup_symbol($1);
+		if (symbol_index < 0) {
 			report_semantic_error("undeclared variable", $1);
+		} else {
+			lhs_type = g_arcane_symbol_table.entries[symbol_index].type;
+			if (!$3.valid) {
+				report_semantic_errorf("Type mismatch in assignment to '%s'", $1);
+			} else if (!arcane_assignment_compatible(lhs_type, $3.type)) {
+				report_semantic_errorf("Type mismatch in assignment to '%s': %s <- %s", $1, arcane_type_name(lhs_type), arcane_type_name($3.type));
+			} else {
+				icg_emit_assign(&g_icg, $1, $3.place);
+				arcane_symbol_table_mark_initialized(&g_arcane_symbol_table, symbol_index);
+			}
 		}
-		if ($3) {
-			icg_emit_assign(&g_icg, $1, $3);
-		}
-		free($3);
+		free($3.place);
 		free($1);
 	  }
-	| IDENTIFIER INIT_ASSIGN expr ';'
+	| IDENTIFIER INIT_ASSIGN expression ';'
 	  {
+		int symbol_index;
+		ArcaneType lhs_type;
+		symbol_index = -1;
 		sync_symbol_context();
-		if (lookup_symbol($1) < 0) {
+		symbol_index = lookup_symbol($1);
+		if (symbol_index < 0) {
 			report_semantic_error("undeclared variable", $1);
+		} else {
+			lhs_type = g_arcane_symbol_table.entries[symbol_index].type;
+			if (!$3.valid) {
+				report_semantic_errorf("Type mismatch in assignment to '%s'", $1);
+			} else if (!arcane_assignment_compatible(lhs_type, $3.type)) {
+				report_semantic_errorf("Type mismatch in assignment to '%s': %s <- %s", $1, arcane_type_name(lhs_type), arcane_type_name($3.type));
+			} else {
+				icg_emit_assign(&g_icg, $1, $3.place);
+				arcane_symbol_table_mark_initialized(&g_arcane_symbol_table, symbol_index);
+			}
 		}
-		if ($3) {
-			icg_emit_assign(&g_icg, $1, $3);
-		}
-		free($3);
+		free($3.place);
 		free($1);
 	  }
 ;
 
 print_stmt:
-	  CAST '(' arg_list_opt ')' ';'
-	| PROPHECY '(' arg_list_opt ')' ';'
-	| CAST IDENTIFIER opt_semi { icg_emit(&g_icg, "print %s\n", $2); free($2); }
+	  CAST '(' arg_list_opt ')' ';' { arcane_args_release(&$3); }
+	| PROPHECY '(' arg_list_opt ')' ';' { arcane_args_release(&$3); }
+	| CAST IDENTIFIER opt_semi {
+		ArcaneType print_type;
+		int initialized = 0;
+		if (lookup_symbol($2) < 0) {
+			report_semantic_error("undeclared variable", $2);
+		} else {
+			(void)arcane_symbol_get_type($2, &print_type);
+			if (arcane_symbol_get_initialized($2, &initialized) == ARCANE_SYMBOL_OK && !initialized) {
+				report_semantic_errorf("Variable '%s' used before initialization", $2);
+			}
+			(void)arcane_symbol_mark_used($2);
+			icg_emit(&g_icg, "print %s\n", $2);
+		}
+		free($2);
+	}
 	| CAST STRING opt_semi { icg_emit(&g_icg, "print \"%s\"\n", $2); free($2); }
-	| PROPHECY STRING ',' IDENTIFIER opt_semi { icg_emit(&g_icg, "print \"%s\"\n", $2); icg_emit(&g_icg, "print %s\n", $4); free($2); free($4); }
+	| PROPHECY STRING ',' IDENTIFIER opt_semi {
+		int initialized = 0;
+		icg_emit(&g_icg, "print \"%s\"\n", $2);
+		if (lookup_symbol($4) < 0) {
+			report_semantic_error("undeclared variable", $4);
+		} else {
+			if (arcane_symbol_get_initialized($4, &initialized) == ARCANE_SYMBOL_OK && !initialized) {
+				report_semantic_errorf("Variable '%s' used before initialization", $4);
+			}
+			(void)arcane_symbol_mark_used($4);
+			icg_emit(&g_icg, "print %s\n", $4);
+		}
+		free($2);
+		free($4);
+	}
 ;
 
 opt_semi:
@@ -406,9 +849,13 @@ opt_semi:
 input_stmt:
 	INPUT '(' IDENTIFIER ')' ';'
 	{
+		int symbol_index;
 		sync_symbol_context();
-		if (lookup_symbol($3) < 0) {
+		symbol_index = lookup_symbol($3);
+		if (symbol_index < 0) {
 			report_semantic_error("undeclared variable", $3);
+		} else {
+			arcane_symbol_table_mark_initialized(&g_arcane_symbol_table, symbol_index);
 		}
 		free($3);
 	}
@@ -417,20 +864,24 @@ input_stmt:
 call:
 	  SUMMON IDENTIFIER ';'
 	  {
+		ArcaneArgSem args;
 		sync_symbol_context();
-		if (lookup_symbol($2) < 0) {
-			report_semantic_error("undeclared function", $2);
-		}
-		icg_emit(&g_icg, "call %s\n", $2);
+		args = arcane_args_empty();
+		(void)arcane_validate_function_call($2, args, 0);
+		icg_emit_call(&g_icg, $2, 0);
+		arcane_args_release(&args);
 		free($2);
 	  }
 	| SUMMON IDENTIFIER WITH '(' arg_list_opt ')' ';'
 	  {
+		int i;
 		sync_symbol_context();
-		if (lookup_symbol($2) < 0) {
-			report_semantic_error("undeclared function", $2);
+		(void)arcane_validate_function_call($2, $5, 0);
+		for (i = 0; i < $5.count; ++i) {
+			icg_emit_arg(&g_icg, $5.places[i] ? $5.places[i] : "0");
 		}
-		icg_emit(&g_icg, "call %s\n", $2);
+		icg_emit_call(&g_icg, $2, $5.count);
+		arcane_args_release(&$5);
 		free($2);
 	  }
 ;
@@ -439,8 +890,11 @@ if_stmt:
 	IF expression
 	{
 		char *end_label = icg_new_label(&g_icg);
-		icg_emit_if_false(&g_icg, $2, end_label);
-		free($2);
+		if ($2.type != ARCANE_TYPE_BOOL || !$2.valid) {
+			report_semantic_errorf("Condition must be boolean");
+		}
+		icg_emit_if_false(&g_icg, $2.place ? $2.place : "0", end_label);
+		free($2.place);
 		$<sval>$ = end_label;
 	}
 	HOUSE statements FI
@@ -451,8 +905,11 @@ if_stmt:
 	| CHECK expr
 	{
 		char *end_label = icg_new_label(&g_icg);
-		icg_emit_if_false(&g_icg, $2, end_label);
-		free($2);
+		if ($2.type != ARCANE_TYPE_BOOL || !$2.valid) {
+			report_semantic_errorf("Condition must be boolean");
+		}
+		icg_emit_if_false(&g_icg, $2.place ? $2.place : "0", end_label);
+		free($2.place);
 		$<sval>$ = end_label;
 	}
 	THEN statements ENDCHECK
@@ -480,10 +937,13 @@ loop_stmt:
 	}
 	expr DO
 	{
-		if (loop_stack_top >= 0) {
-			icg_emit_if_false(&g_icg, $3, loop_end_stack[loop_stack_top]);
+		if ($3.type != ARCANE_TYPE_BOOL || !$3.valid) {
+			report_semantic_errorf("Condition must be boolean");
 		}
-		free($3);
+		if (loop_stack_top >= 0) {
+			icg_emit_if_false(&g_icg, $3.place ? $3.place : "0", loop_end_stack[loop_stack_top]);
+		}
+		free($3.place);
 	}
 	statements ENDLOOP
 	{
@@ -502,6 +962,8 @@ break_stmt:
 	{
 		if (loop_stack_top >= 0) {
 			icg_emit_goto(&g_icg, loop_end_stack[loop_stack_top]);
+		} else {
+			report_semantic_errorf("'BREAK' used outside loop");
 		}
 	}
 ;
@@ -511,123 +973,201 @@ continue_stmt:
 	{
 		if (loop_stack_top >= 0) {
 			icg_emit_goto(&g_icg, loop_start_stack[loop_stack_top]);
+		} else {
+			report_semantic_errorf("'CONTINUE' used outside loop");
 		}
 	}
 ;
 
 return_stmt:
 	RETURN expression_opt ';'
+	{
+		ArcaneType expected_type = ARCANE_TYPE_VOID;
+		if (current_function_name[0] == '\0') {
+			report_semantic_errorf("'RETURN' used outside function");
+		} else {
+			(void)arcane_symbol_get_function_signature(current_function_name, &expected_type, NULL, NULL, 0);
+
+			if (expected_type == ARCANE_TYPE_VOID) {
+				if ($2.type != ARCANE_TYPE_VOID) {
+					report_semantic_errorf("Void function '%s' cannot return a value", current_function_name);
+				}
+			} else if ($2.type == ARCANE_TYPE_VOID) {
+				report_semantic_errorf("Function '%s' must return a value of type %s", current_function_name, arcane_type_name(expected_type));
+			} else if (!arcane_assignment_compatible(expected_type, $2.type)) {
+				report_semantic_errorf("Return type mismatch in '%s': expected %s but got %s", current_function_name, arcane_type_name(expected_type), arcane_type_name($2.type));
+			}
+			if ($2.type == ARCANE_TYPE_VOID || !$2.valid) {
+				icg_emit_return(&g_icg, NULL);
+			} else {
+				icg_emit_return(&g_icg, $2.place);
+			}
+		}
+		free($2.place);
+	}
 ;
 
 expression_opt:
 	  expression
-	|
+	| {
+		$$.place = NULL;
+		$$.type = ARCANE_TYPE_VOID;
+		$$.valid = 1;
+	}
 ;
 
 arg_list_opt:
-	  arg_list
-	|
+	  arg_list { $$ = $1; }
+	| { $$ = arcane_args_empty(); }
 ;
 
 arg_list:
-	  expression { free($1); }
-	| arg_list ',' expression { free($3); }
+	  expression {
+		ArcaneArgSem args = arcane_args_empty();
+		args = arcane_args_append(args, $1.type, $1.place, $1.valid);
+		$$ = args;
+	}
+	| arg_list ',' expression {
+		ArcaneArgSem args = $1;
+		args = arcane_args_append(args, $3.type, $3.place, $3.valid);
+		$$ = args;
+	}
 ;
 
-id_list_opt:
-	  id_list
-	|
+param_list_opt:
+	  param_list { $$ = $1; }
+	| { $$ = arcane_params_empty(); }
 ;
 
-id_list:
-	  IDENTIFIER
-	  {
-		int parameter_insert_result;
-		sync_symbol_context();
-		parameter_insert_result = arcane_insert_symbol($1, ARCANE_SYMBOL_PARAMETER, ARCANE_TYPE_UNKNOWN, (ArcaneHouse)current_house, current_scope_level, current_function_name, 0);
-		if (parameter_insert_result == ARCANE_SYMBOL_DUPLICATE) {
-			report_semantic_error("duplicate parameter", $1);
+param_list:
+	  param_decl { $$ = $1; }
+	| param_list ',' param_decl {
+		ArcaneParamSem merged = $1;
+		int i;
+		for (i = 0; i < $3.count; ++i) {
+			merged = arcane_params_append(merged, $3.names[i], $3.types[i]);
+			$3.names[i] = NULL;
 		}
-		free($1);
-	  }
-	| id_list ',' IDENTIFIER
-	  {
-		int parameter_insert_result;
-		sync_symbol_context();
-		parameter_insert_result = arcane_insert_symbol($3, ARCANE_SYMBOL_PARAMETER, ARCANE_TYPE_UNKNOWN, (ArcaneHouse)current_house, current_scope_level, current_function_name, 0);
-		if (parameter_insert_result == ARCANE_SYMBOL_DUPLICATE) {
-			report_semantic_error("duplicate parameter", $3);
-		}
-		free($3);
-	  }
+		arcane_params_release(&$3);
+		$$ = merged;
+	}
+;
+
+param_decl:
+	  IDENTIFIER {
+		ArcaneParamSem p = arcane_params_empty();
+		p = arcane_params_append(p, $1, ARCANE_TYPE_UNKNOWN);
+		$$ = p;
+	}
+	| IDENTIFIER AS type_spec {
+		ArcaneParamSem p = arcane_params_empty();
+		p = arcane_params_append(p, $1, (ArcaneType)$3);
+		$$ = p;
+	}
 ;
 
 expr:
-	  expr '+' expr { $$ = emit_binary_temp("+", $1, $3); }
-	| expr '-' expr { $$ = emit_binary_temp("-", $1, $3); }
-	| expr '*' expr { $$ = emit_binary_temp("*", $1, $3); }
-	| expr '/' expr { $$ = emit_binary_temp("/", $1, $3); }
-	| expr '>' expr { $$ = emit_binary_temp(">", $1, $3); }
-	| expr '<' expr { $$ = emit_binary_temp("<", $1, $3); }
-	| expr GE expr { $$ = emit_binary_temp(">=", $1, $3); }
-	| expr LE expr { $$ = emit_binary_temp("<=", $1, $3); }
-	| expr EQ expr { $$ = emit_binary_temp("==", $1, $3); }
-	| expr NE expr { $$ = emit_binary_temp("!=", $1, $3); }
+	  expr '+' expr { $$ = arcane_expr_binary_numeric("+", $1, $3); }
+	| expr '-' expr { $$ = arcane_expr_binary_numeric("-", $1, $3); }
+	| expr '*' expr { $$ = arcane_expr_binary_numeric("*", $1, $3); }
+	| expr '/' expr {
+		if ($3.valid && $3.place && strcmp($3.place, "0") == 0) {
+			report_semantic_errorf("Possible division by zero");
+		}
+		$$ = arcane_expr_binary_numeric("/", $1, $3);
+	}
+	| expr '>' expr { $$ = arcane_expr_binary_compare(">", $1, $3); }
+	| expr '<' expr { $$ = arcane_expr_binary_compare("<", $1, $3); }
+	| expr GE expr { $$ = arcane_expr_binary_compare(">=", $1, $3); }
+	| expr LE expr { $$ = arcane_expr_binary_compare("<=", $1, $3); }
+	| expr EQ expr { $$ = arcane_expr_binary_compare("==", $1, $3); }
+	| expr NE expr { $$ = arcane_expr_binary_compare("!=", $1, $3); }
 	| IDENTIFIER
 	  {
 		sync_symbol_context();
-		if (lookup_symbol($1) < 0) {
-			report_semantic_error("undeclared variable", $1);
-		}
-		$$ = icg_dup_text($1);
+		$$ = arcane_expr_identifier($1);
 		free($1);
 	  }
-	| NUMBER { $$ = icg_int_literal($1); }
+	| NUMBER { $$ = arcane_expr_make(icg_int_literal($1), ARCANE_TYPE_INT, 1); }
 ;
 
 expression:
 	  expr { $$ = $1; }
 	| STRING
 	  {
-		$$ = wrap_literal($1, '"');
+		$$ = arcane_expr_make(wrap_literal($1, '"'), ARCANE_TYPE_STRING, 1);
 		free($1);
 	  }
 	| CHAR_LITERAL
 	  {
-		$$ = wrap_literal($1, '\'');
+		$$ = arcane_expr_make(wrap_literal($1, '\''), ARCANE_TYPE_CHAR, 1);
 		free($1);
 	  }
-	| BOOL_LITERAL { $$ = $1; }
+	| BOOL_LITERAL { $$ = arcane_expr_make($1, ARCANE_TYPE_BOOL, 1); }
 	| '(' expression ')' { $$ = $2; }
 	| '-' expression %prec UMINUS
 	  {
-		$$ = emit_binary_temp("*", icg_int_literal(-1), $2);
+		ArcaneExprSem minus_one;
+		if (!arcane_type_is_numeric($2.type) || !$2.valid) {
+			report_semantic_errorf("Invalid unary '-' operand type: %s", arcane_type_name($2.type));
+			free($2.place);
+			$$ = arcane_expr_invalid();
+		} else {
+			minus_one = arcane_expr_make(icg_int_literal(-1), ARCANE_TYPE_INT, 1);
+			$$ = arcane_expr_binary_numeric("*", minus_one, $2);
+		}
 	  }
 	| NOT expression
 	  {
-		char *temp = icg_new_temp(&g_icg);
-		if (temp && $2) {
-			icg_emit(&g_icg, "%s = NOT %s\n", temp, $2);
+		char *temp = NULL;
+		if ($2.type != ARCANE_TYPE_BOOL || !$2.valid) {
+			report_semantic_errorf("Invalid NOT operand type: %s", arcane_type_name($2.type));
+			free($2.place);
+			$$ = arcane_expr_invalid();
+		} else {
+			temp = icg_new_temp(&g_icg);
+			if (temp && $2.place) {
+				icg_emit(&g_icg, "%s = NOT %s\n", temp, $2.place);
+			}
+			free($2.place);
+			$$ = arcane_expr_make(temp, ARCANE_TYPE_BOOL, temp != NULL);
 		}
-		free($2);
-		$$ = temp;
 	  }
-	| expression '%' expression { $$ = emit_binary_temp("%", $1, $3); }
-	| expression AND expression { $$ = emit_binary_temp("AND", $1, $3); }
-	| expression OR expression { $$ = emit_binary_temp("OR", $1, $3); }
-	| expression XOR expression { $$ = emit_binary_temp("XOR", $1, $3); }
+	| expression '%' expression {
+		if (!$1.valid || !$3.valid || !arcane_type_is_integral($1.type) || !arcane_type_is_integral($3.type)) {
+			report_semantic_errorf("Invalid operand types for '%%': %s and %s", arcane_type_name($1.type), arcane_type_name($3.type));
+			free($1.place);
+			free($3.place);
+			$$ = arcane_expr_invalid();
+		} else {
+			$$ = arcane_expr_make(emit_binary_temp("%", $1.place, $3.place), ARCANE_TYPE_INT, 1);
+		}
+	}
+	| expression AND expression { $$ = arcane_expr_binary_logic("AND", $1, $3); }
+	| expression OR expression { $$ = arcane_expr_binary_logic("OR", $1, $3); }
+	| expression XOR expression { $$ = arcane_expr_binary_logic("XOR", $1, $3); }
 	| IDENTIFIER '(' arg_list_opt ')'
 	  {
+		int i;
 		char *temp;
+		ArcaneType return_type;
 		sync_symbol_context();
-		if (lookup_symbol($1) < 0) {
-			report_semantic_error("undeclared function", $1);
+		return_type = arcane_validate_function_call($1, $3, 1);
+		temp = NULL;
+		for (i = 0; i < $3.count; ++i) {
+			icg_emit_arg(&g_icg, $3.places[i] ? $3.places[i] : "0");
 		}
-		temp = icg_new_temp(&g_icg);
-		if (temp) {
-			icg_emit(&g_icg, "%s = call %s\n", temp, $1);
+		if (return_type != ARCANE_TYPE_VOID) {
+			temp = icg_new_temp(&g_icg);
+			if (temp) {
+				icg_emit_call_assign(&g_icg, temp, $1, $3.count);
+			}
+			$$ = arcane_expr_make(temp, return_type, temp != NULL);
+		} else {
+			icg_emit_call(&g_icg, $1, $3.count);
+			$$ = arcane_expr_invalid();
 		}
-		$$ = temp;
+		arcane_args_release(&$3);
 		free($1);
 	  }
 ;
@@ -746,11 +1286,17 @@ static int scan_string(void) {
 			if (escaped == EOF) {
 				break;
 			}
+			if (escaped == '\n') {
+				g_manual_line++;
+			}
 			if (length < (int)sizeof(buffer) - 2) {
 				buffer[length++] = '\\';
 				buffer[length++] = (char)escaped;
 			}
 			continue;
+		}
+		if (ch == '\n') {
+			g_manual_line++;
 		}
 		if (ch == '"') {
 			buffer[length] = '\0';
@@ -773,9 +1319,15 @@ static int scan_char(void) {
 		if (escaped == EOF) {
 			return 0;
 		}
+		if (escaped == '\n') {
+			g_manual_line++;
+		}
 		buffer[length++] = '\\';
 		buffer[length++] = (char)escaped;
 	} else if (ch != EOF) {
+		if (ch == '\n') {
+			g_manual_line++;
+		}
 		buffer[length++] = (char)ch;
 	}
 	ch = fgetc(yyin);
@@ -795,6 +1347,9 @@ int yylex(void) {
 
 	while ((ch = fgetc(yyin)) != EOF) {
 		if (isspace(ch)) {
+			if (ch == '\n') {
+				g_manual_line++;
+			}
 			continue;
 		}
 
@@ -811,11 +1366,17 @@ int yylex(void) {
 				int next = fgetc(yyin);
 				if (next == '#') {
 					while ((ch = fgetc(yyin)) != EOF && ch != '\n') { }
+					if (ch == '\n') {
+						g_manual_line++;
+					}
 					continue;
 				}
 				if (next == '*') {
 					int prev = 0;
 					while ((ch = fgetc(yyin)) != EOF) {
+						if (ch == '\n') {
+							g_manual_line++;
+						}
 						if (prev == '*' && ch == '#') {
 							break;
 						}
@@ -878,6 +1439,9 @@ int yylex(void) {
 #endif
 
 int main(int argc, char **argv) {
+#ifndef USE_FLEX_LEXER
+	g_manual_line = 1;
+#endif
 	if (argc > 1) {
 		yyin = fopen(argv[1], "r");
 		if (!yyin) {

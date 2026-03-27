@@ -7,6 +7,7 @@
 #define ARCANE_MAX_SYMBOLS 256
 #define ARCANE_MAX_NAME_LEN 64
 #define ARCANE_MAX_STRING_VALUE_LEN 128
+#define ARCANE_MAX_FUNCTION_PARAMS 32
 
 typedef enum {
     ARCANE_TYPE_UNKNOWN = 0,
@@ -48,6 +49,8 @@ typedef struct {
     char name[ARCANE_MAX_NAME_LEN];
     ArcaneSymbolKind kind;
     ArcaneType type;
+    int param_count;
+    ArcaneType param_types[ARCANE_MAX_FUNCTION_PARAMS];
     ArcaneHouse house;
     int scope_level;
     char owner_function[ARCANE_MAX_NAME_LEN];
@@ -105,6 +108,14 @@ int arcane_find_symbol(
 
 int insert_symbol(const char *name, ArcaneType type, int value);
 int lookup_symbol(const char *name);
+int arcane_find_global_function(const char *name);
+int arcane_symbol_get_type(const char *name, ArcaneType *type_out);
+int arcane_symbol_get_kind(const char *name, ArcaneSymbolKind *kind_out);
+int arcane_symbol_get_initialized(const char *name, int *initialized_out);
+int arcane_symbol_mark_used(const char *name);
+int arcane_symbol_mark_initialized(const char *name);
+int arcane_symbol_set_function_signature(const char *name, ArcaneType return_type, int param_count, const ArcaneType *param_types);
+int arcane_symbol_get_function_signature(const char *name, ArcaneType *return_type_out, int *param_count_out, ArcaneType *param_types_out, int max_param_types);
 
 static inline void arcane_copy_text(char *dst, size_t dst_size, const char *src) {
     if (!dst || dst_size == 0) {

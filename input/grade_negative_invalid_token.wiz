@@ -1,0 +1,6 @@
+ENTER_HOGWARTS
+HOUSE Gryffindor
+DECLARE x AS INT := 1;
+@bad_token_here
+ENDHOUSE
+EXIT_HOGWARTS

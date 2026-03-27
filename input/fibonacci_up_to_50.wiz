@@ -1,0 +1,29 @@
+ENTER_HOGWARTS
+
+HOUSE Gryffindor
+DECLARE a AS INT := 0;
+DECLARE b AS INT := 1;
+DECLARE next AS INT := 0;
+DECLARE limit AS INT := 50;
+ENDHOUSE
+
+Slytherin
+SPELL houseReady HOUSE
+ENDSPELL
+
+HOUSE Hufflepuff
+CHECK a < limit THEN
+CAST a;
+ENDCHECK
+ENDHOUSE
+
+HOUSE Ravenclaw
+LOOP b < limit DO
+CAST b;
+next = a + b;
+a = b;
+b = next;
+ENDLOOP
+ENDHOUSE
+
+EXIT_HOGWARTS

@@ -227,6 +227,63 @@ void icg_emit_if_false(ArcaneICG *icg, const char *condition_place, const char *
     icg_emit(icg, "ifFalse %s goto %s\n", condition_place, label);
 }
 
+void icg_emit_func_begin(ArcaneICG *icg, const char *function_name) {
+    if (!function_name) {
+        return;
+    }
+
+    icg_emit(icg, "func_begin %s\n", function_name);
+}
+
+void icg_emit_func_end(ArcaneICG *icg, const char *function_name) {
+    if (!function_name) {
+        return;
+    }
+
+    icg_emit(icg, "func_end %s\n", function_name);
+}
+
+void icg_emit_param(ArcaneICG *icg, const char *param_name) {
+    if (!param_name) {
+        return;
+    }
+
+    icg_emit(icg, "param %s\n", param_name);
+}
+
+void icg_emit_arg(ArcaneICG *icg, const char *arg_place) {
+    if (!arg_place) {
+        return;
+    }
+
+    icg_emit(icg, "arg %s\n", arg_place);
+}
+
+void icg_emit_call(ArcaneICG *icg, const char *function_name, int arg_count) {
+    if (!function_name) {
+        return;
+    }
+
+    icg_emit(icg, "call %s %d\n", function_name, arg_count);
+}
+
+void icg_emit_call_assign(ArcaneICG *icg, const char *target, const char *function_name, int arg_count) {
+    if (!target || !function_name) {
+        return;
+    }
+
+    icg_emit(icg, "%s = call %s %d\n", target, function_name, arg_count);
+}
+
+void icg_emit_return(ArcaneICG *icg, const char *value_place) {
+    if (!value_place || value_place[0] == '\0') {
+        icg_emit(icg, "return\n");
+        return;
+    }
+
+    icg_emit(icg, "return %s\n", value_place);
+}
+
 void print_icg(const ArcaneICG *icg, FILE *output) {
     int index;
     FILE *stream;
