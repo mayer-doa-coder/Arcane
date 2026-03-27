@@ -1,4 +1,6 @@
 %{
+#include <stdlib.h>
+#include <string.h>
 #include <stdio.h>
 
 #if defined(__has_include)
@@ -17,6 +19,47 @@ int comment_depth = 0;
 extern int yylineno;
 int current_column = 1;
 int token_start_column = 1;
+
+static char *dup_text(const char *text) {
+	char *copy;
+	size_t len;
+
+	if (!text) {
+		return NULL;
+	}
+
+	len = strlen(text);
+	copy = (char *)malloc(len + 1);
+	if (!copy) {
+		return NULL;
+	}
+
+	memcpy(copy, text, len + 1);
+	return copy;
+}
+
+static char *dup_unquoted(const char *text) {
+	char *copy;
+	size_t len;
+
+	if (!text) {
+		return NULL;
+	}
+
+	len = strlen(text);
+	if (len >= 2 && ((text[0] == '"' && text[len - 1] == '"') || (text[0] == '\'' && text[len - 1] == '\''))) {
+		len -= 2;
+		copy = (char *)malloc(len + 1);
+		if (!copy) {
+			return NULL;
+		}
+		memcpy(copy, text + 1, len);
+		copy[len] = '\0';
+		return copy;
+	}
+
+	return dup_text(text);
+}
 
 static void update_column(const char *text, int length) {
 	int i;
@@ -38,7 +81,7 @@ static void report_lexical_error(const char *text) {
 		return;
 	}
 
-	fprintf(stderr, "Lexical Error (line %d, col %d): Unknown token '%s'\n", yylineno, token_start_column, text);
+	fprintf(stderr, "LEXICAL ERROR: line %d, col %d: Unknown token '%s'\n", yylineno, token_start_column, text);
 }
 
 #define YY_USER_ACTION \
@@ -122,32 +165,32 @@ OCTAL           0[0-7]+
 "NOT"                       { return NOT; }
 "XOR"                       { return XOR; }
 
-"POWER"                     { return IDENTIFIER; }
-"ROOT"                      { return IDENTIFIER; }
-"FLOOR"                     { return IDENTIFIER; }
-"CEIL"                      { return IDENTIFIER; }
-"ABS"                       { return IDENTIFIER; }
-"LOG"                       { return IDENTIFIER; }
-"SIN"                       { return IDENTIFIER; }
-"COS"                       { return IDENTIFIER; }
-"TAN"                       { return IDENTIFIER; }
+"POWO"                      { return POWO; }
+"RADIX"                     { return RADIX; }
+"FLOORUS"                   { return FLOORUS; }
+"CEILUS"                    { return CEILUS; }
+"ABSOLUTUS"                 { return ABSOLUTUS; }
+"LOGUS"                     { return LOGUS; }
+"SINUS"                     { return SINUS; }
+"COSINUS"                   { return COSINUS; }
+"TANUS"                     { return TANUS; }
 
 "=="                        { return EQ; }
 "!="                        { return NE; }
 ">="                        { return GE; }
 "<="                        { return LE; }
 
-"true"                      { return BOOL_LITERAL; }
-"false"                     { return BOOL_LITERAL; }
-"\""([^"\\\n]|\\.)*"\""  { return STRING; }
-'([^'\\\n]|\\.)'          { return CHAR_LITERAL; }
+"true"                      { yylval.sval = dup_text(yytext); return BOOL_LITERAL; }
+"false"                     { yylval.sval = dup_text(yytext); return BOOL_LITERAL; }
+"\""([^"\\\n]|\\.)*"\""  { yylval.sval = dup_unquoted(yytext); return STRING; }
+'([^'\\\n]|\\.)'          { yylval.sval = dup_unquoted(yytext); return CHAR_LITERAL; }
 
-{HEX}                       { return NUMBER; }
-{OCTAL}                     { return NUMBER; }
-{FLOAT_LITERAL}             { return NUMBER; }
+{HEX}                       { yylval.ival = (int)strtol(yytext, NULL, 0); return NUMBER; }
+{OCTAL}                     { yylval.ival = (int)strtol(yytext, NULL, 0); return NUMBER; }
+{FLOAT_LITERAL}             { yylval.ival = (int)strtol(yytext, NULL, 10); return NUMBER; }
 {INTEGER}{IDENTIFIER}       { report_lexical_error(yytext); }
-{INTEGER}                   { return NUMBER; }
-{IDENTIFIER}                { return IDENTIFIER; }
+{INTEGER}                   { yylval.ival = (int)strtol(yytext, NULL, 10); return NUMBER; }
+{IDENTIFIER}                { yylval.sval = dup_text(yytext); return IDENTIFIER; }
 
 [ \t\r\n]+                { }
 
@@ -172,7 +215,7 @@ OCTAL           0[0-7]+
 .                           { report_lexical_error(yytext); }
 
 <MULTILINE_COMMENT><<EOF>>  {
-							fprintf(stderr, "Lexical Error (line %d, col %d): Unterminated multiline comment\n", yylineno, token_start_column);
+							fprintf(stderr, "LEXICAL ERROR: line %d, col %d: Unterminated multiline comment\n", yylineno, token_start_column);
 							BEGIN(INITIAL);
 							return 0;
 						}

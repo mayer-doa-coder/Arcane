@@ -56,6 +56,16 @@
 #define WZ_KW_NOT "NOT"
 #define WZ_KW_XOR "XOR"
 
+#define WZ_KW_POWO "POWO"
+#define WZ_KW_RADIX "RADIX"
+#define WZ_KW_FLOORUS "FLOORUS"
+#define WZ_KW_CEILUS "CEILUS"
+#define WZ_KW_ABSOLUTUS "ABSOLUTUS"
+#define WZ_KW_LOGUS "LOGUS"
+#define WZ_KW_SINUS "SINUS"
+#define WZ_KW_COSINUS "COSINUS"
+#define WZ_KW_TANUS "TANUS"
+
 #define WZ_KW_TRUE "true"
 #define WZ_KW_FALSE "false"
 

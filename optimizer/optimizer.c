@@ -134,7 +134,16 @@ static int line_is_unsafe_for_optimization(const char *line) {
         strncmp(trimmed, "arg ", 4) == 0 ||
         strncmp(trimmed, "call ", 5) == 0 ||
         strncmp(trimmed, "return", 6) == 0 ||
-        strncmp(trimmed, "print ", 6) == 0) {
+        strncmp(trimmed, "print ", 6) == 0 ||
+        strstr(trimmed, "POWO(") != NULL ||
+        strstr(trimmed, "RADIX(") != NULL ||
+        strstr(trimmed, "FLOORUS(") != NULL ||
+        strstr(trimmed, "CEILUS(") != NULL ||
+        strstr(trimmed, "ABSOLUTUS(") != NULL ||
+        strstr(trimmed, "LOGUS(") != NULL ||
+        strstr(trimmed, "SINUS(") != NULL ||
+        strstr(trimmed, "COSINUS(") != NULL ||
+        strstr(trimmed, "TANUS(") != NULL) {
         return 1;
     }
 

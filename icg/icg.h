@@ -34,6 +34,7 @@ void icg_emit_arg(ArcaneICG *icg, const char *arg_place);
 void icg_emit_call(ArcaneICG *icg, const char *function_name, int arg_count);
 void icg_emit_call_assign(ArcaneICG *icg, const char *target, const char *function_name, int arg_count);
 void icg_emit_return(ArcaneICG *icg, const char *value_place);
+void icg_emit_math_call(ArcaneICG *icg, const char *target, const char *function_name, const char *arg1, const char *arg2, int arg_count);
 void print_icg(const ArcaneICG *icg, FILE *output);
 
 #endif

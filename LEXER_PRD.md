@@ -44,7 +44,7 @@ All reserved words and mappings come from:
 - `AND`, `OR`, `NOT`, `XOR`
 
 ### 3.11 Math Function Keywords
-- `POWER`, `ROOT`, `FLOOR`, `CEIL`, `ABS`, `LOG`, `SIN`, `COS`, `TAN`
+- `POWO`, `RADIX`, `FLOORUS`, `CEILUS`, `ABSOLUTUS`, `LOGUS`, `SINUS`, `COSINUS`, `TANUS`
 
 ### 3.12 Generic Tokens
 - `IDENTIFIER` → `[a-zA-Z_][a-zA-Z0-9_]*`

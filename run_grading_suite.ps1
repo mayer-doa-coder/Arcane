@@ -8,7 +8,6 @@ $repoRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
 $parserDir = Join-Path $repoRoot "parser"
 $inputDir = Join-Path $repoRoot "input"
 $outputDir = Join-Path $repoRoot "output"
-$lexerExe = Join-Path $repoRoot "lexer\wizard_lexer.exe"
 
 $timestamp = Get-Date -Format "yyyy-MM-dd_HHmmss"
 $runRoot = Join-Path $repoRoot (Join-Path $OutDir $timestamp)
@@ -43,11 +42,20 @@ $tests = @(
 Push-Location $parserDir
 try {
     if (-not $SkipBuild) {
-        Write-Host ">>> Building parser"
+        Write-Host ">>> Building parser (Bison + Flex)"
         bison -d wizard.y
         if ($LASTEXITCODE -ne 0) { throw "bison failed" }
 
-        g++ -Wall wizard.tab.c ..\symbol_table\symbol_table.c ..\icg\icg.c ..\optimizer\optimizer.c ..\codegen\codegen.c -o wizard_parser.exe
+        Push-Location (Join-Path $repoRoot "lexer")
+        try {
+            flex wizard.l
+            if ($LASTEXITCODE -ne 0) { throw "flex failed" }
+        }
+        finally {
+            Pop-Location
+        }
+
+        g++ -Wall -DUSE_FLEX_LEXER wizard.tab.c ..\lexer\lex.yy.c ..\symbol_table\symbol_table.c ..\icg\icg.c ..\optimizer\optimizer.c ..\codegen\codegen.c -o wizard_parser.exe
         if ($LASTEXITCODE -ne 0) { throw "g++ build failed" }
     }
 
@@ -59,8 +67,6 @@ try {
         $cCopy = Join-Path $generatedDir ("{0}.c" -f $t.Name)
         $exePath = Join-Path $exeDir ("{0}.exe" -f $t.Name)
         $runtimeLog = Join-Path $logsDir ("{0}.runtime.log" -f $t.Name)
-        $lexerLog = Join-Path $logsDir ("{0}.lexer.log" -f $t.Name)
-        $lexerTokenOut = Join-Path $logsDir ("{0}.tokens.txt" -f $t.Name)
 
         Write-Host (">>> Running {0}" -f $t.Name)
         $parserCmd = '".\wizard_parser.exe" "{0}" > "{1}" 2>&1' -f $testFile, $logFile
@@ -75,7 +81,6 @@ try {
         $runtimeExit = $null
         $generatedCPath = ""
         $runtimeLogPath = ""
-        $lexerLogPath = ""
 
         if (Test-Path $cCopy) {
             $generatedCPath = (Resolve-Path $cCopy).Path
@@ -94,28 +99,15 @@ try {
             }
         }
 
-        if ($t.Name -eq "grade_negative_invalid_token" -and (Test-Path $lexerExe)) {
-            $lexerCmd = '"{0}" "{1}" "{2}" > "{3}" 2>&1' -f $lexerExe, $testFile, $lexerTokenOut, $lexerLog
-            cmd /c $lexerCmd | Out-Null
-            if (Test-Path $lexerLog) {
-                $lexerLogPath = (Resolve-Path $lexerLog).Path
-            }
-        }
-
         $hasLexicalError = $false
         $hasParseError = $false
         $hasSemanticError = $false
         if (Test-Path $logFile) {
             $raw = Get-Content -Path $logFile -Raw
-            if ($raw -match "Lexical Error") { $hasLexicalError = $true }
+            if ($raw -match "LEXICAL ERROR|Lexical Error") { $hasLexicalError = $true }
             if ($raw -match "Parse error") { $hasParseError = $true }
             if ($raw -match "Semantic Error") { $hasSemanticError = $true }
         }
-        if ((-not $hasLexicalError) -and (Test-Path $lexerLog)) {
-            $rawLexer = Get-Content -Path $lexerLog -Raw
-            if ($rawLexer -match "Lexical Error") { $hasLexicalError = $true }
-        }
-
         $summary += [PSCustomObject]@{
             Test = $t.Name
             Category = $t.Kind
@@ -126,7 +118,6 @@ try {
             HasParseError = $hasParseError
             HasSemanticError = $hasSemanticError
             ParserLog = (Resolve-Path $logFile).Path
-            LexerLog = $lexerLogPath
             GeneratedC = $generatedCPath
             RuntimeLog = $runtimeLogPath
         }

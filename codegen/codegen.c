@@ -44,6 +44,71 @@ static size_t line_content_length(const char *line) {
     return strcspn(line, "\r\n");
 }
 
+static const char *map_math_function_name(const char *name) {
+    if (!name) {
+        return NULL;
+    }
+    if (strcmp(name, "POWO") == 0) return "pow";
+    if (strcmp(name, "RADIX") == 0) return "sqrt";
+    if (strcmp(name, "FLOORUS") == 0) return "floor";
+    if (strcmp(name, "CEILUS") == 0) return "ceil";
+    if (strcmp(name, "ABSOLUTUS") == 0) return "abs";
+    if (strcmp(name, "LOGUS") == 0) return "log";
+    if (strcmp(name, "SINUS") == 0) return "sin";
+    if (strcmp(name, "COSINUS") == 0) return "cos";
+    if (strcmp(name, "TANUS") == 0) return "tan";
+    return NULL;
+}
+
+static void rewrite_math_calls(const char *input, char *output, size_t output_size) {
+    size_t in_index = 0;
+    size_t out_index = 0;
+
+    if (!output || output_size == 0) {
+        return;
+    }
+    output[0] = '\0';
+    if (!input) {
+        return;
+    }
+
+    while (input[in_index] != '\0' && out_index + 1 < output_size) {
+        if ((isalpha((unsigned char)input[in_index]) || input[in_index] == '_')) {
+            char ident[64];
+            size_t ident_len = 0;
+            size_t start = in_index;
+            const char *mapped;
+
+            while ((isalpha((unsigned char)input[in_index]) || isdigit((unsigned char)input[in_index]) || input[in_index] == '_') && ident_len + 1 < sizeof(ident)) {
+                ident[ident_len++] = input[in_index++];
+            }
+            ident[ident_len] = '\0';
+
+            if (ident_len > 0 && input[in_index] == '(') {
+                mapped = map_math_function_name(ident);
+                if (mapped) {
+                    size_t mapped_len = strlen(mapped);
+                    if (out_index + mapped_len + 1 >= output_size) {
+                        break;
+                    }
+                    memcpy(output + out_index, mapped, mapped_len);
+                    out_index += mapped_len;
+                    continue;
+                }
+            }
+
+            while (start < in_index && out_index + 1 < output_size) {
+                output[out_index++] = input[start++];
+            }
+            continue;
+        }
+
+        output[out_index++] = input[in_index++];
+    }
+
+    output[out_index] = '\0';
+}
+
 static int is_temp_symbol(const char *name) {
     size_t index;
 
@@ -375,7 +440,9 @@ static void emit_ir_line_as_c(FILE *fp, const char *line, ArcanePendingArgs *pen
     if (starts_with(line, "return")) {
         char ret_expr[128];
         if (sscanf(line, "return %127[^\r\n]", ret_expr) == 1) {
-            fprintf(fp, "    return %s;\n", ret_expr);
+            char mapped_expr[256];
+            rewrite_math_calls(ret_expr, mapped_expr, sizeof(mapped_expr));
+            fprintf(fp, "    return %s;\n", mapped_expr);
         } else {
             fprintf(fp, "    return;\n");
         }
@@ -418,7 +485,37 @@ static void emit_ir_line_as_c(FILE *fp, const char *line, ArcanePendingArgs *pen
     }
 
     if (should_emit_assignment(line)) {
-        fprintf(fp, "    %.*s;\n", (int)len, line);
+        char lhs_name[64];
+        const char *equal_pos;
+        const char *rhs_start;
+        char rhs_text[256];
+        char mapped_rhs[256];
+        size_t rhs_len;
+
+        if (!extract_lhs_name(line, lhs_name, sizeof(lhs_name))) {
+            fprintf(fp, "    %.*s;\n", (int)len, line);
+            return;
+        }
+
+        equal_pos = strchr(line, '=');
+        if (!equal_pos) {
+            fprintf(fp, "    %.*s;\n", (int)len, line);
+            return;
+        }
+
+        rhs_start = equal_pos + 1;
+        while (*rhs_start && isspace((unsigned char)*rhs_start)) {
+            rhs_start++;
+        }
+        rhs_len = strcspn(rhs_start, "\r\n");
+        if (rhs_len >= sizeof(rhs_text)) {
+            rhs_len = sizeof(rhs_text) - 1;
+        }
+        memcpy(rhs_text, rhs_start, rhs_len);
+        rhs_text[rhs_len] = '\0';
+
+        rewrite_math_calls(rhs_text, mapped_rhs, sizeof(mapped_rhs));
+        fprintf(fp, "    %s=%s;\n", lhs_name, mapped_rhs);
     }
 }
 
@@ -591,7 +688,8 @@ int generate_c_code(const ArcaneSymbolTable *symbols, const ArcaneICG *icg, cons
         return -2;
     }
 
-    fprintf(fp, "#include <stdio.h>\n\n");
+    fprintf(fp, "#include <stdio.h>\n");
+    fprintf(fp, "#include <math.h>\n\n");
 
     for (i = 0; i < symbols->count; ++i) {
         const ArcaneSymbol *symbol = &symbols->entries[i];

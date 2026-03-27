@@ -30,6 +30,8 @@ char *loop_end_stack[64];
 int loop_stack_top = -1;
 static char *emit_binary_temp(const char *op, char *left, char *right);
 
+#ifndef ARCANE_PARSER_SEM_TYPES_DEFINED
+#define ARCANE_PARSER_SEM_TYPES_DEFINED
 typedef struct {
 	char *place;
 	ArcaneType type;
@@ -49,6 +51,7 @@ typedef struct {
 	ArcaneType types[ARCANE_MAX_FUNCTION_PARAMS];
 	int valid;
 } ArcaneParamSem;
+#endif
 
 static int semantic_error_count = 0;
 #ifndef USE_FLEX_LEXER
@@ -142,6 +145,277 @@ static int arcane_assignment_compatible(ArcaneType destination, ArcaneType sourc
 	}
 
 	return 0;
+}
+
+static int is_temp_name_text(const char *name) {
+	size_t i;
+	if (!name || name[0] != 't' || !isdigit((unsigned char)name[1])) {
+		return 0;
+	}
+	for (i = 2; name[i] != '\0'; ++i) {
+		if (!isdigit((unsigned char)name[i])) {
+			return 0;
+		}
+	}
+	return 1;
+}
+
+static int is_label_name_text(const char *name) {
+	size_t i;
+	if (!name || name[0] != 'L' || !isdigit((unsigned char)name[1])) {
+		return 0;
+	}
+	for (i = 2; name[i] != '\0'; ++i) {
+		if (!isdigit((unsigned char)name[i])) {
+			return 0;
+		}
+	}
+	return 1;
+}
+
+static int is_numeric_text(const char *text) {
+	char *end;
+	if (!text || text[0] == '\0') {
+		return 0;
+	}
+	(void)strtod(text, &end);
+	return end && *end == '\0';
+}
+
+static int symbol_exists_any(const char *name) {
+	int i;
+	if (!name || name[0] == '\0') {
+		return 0;
+	}
+	for (i = 0; i < g_arcane_symbol_table.count; ++i) {
+		if (strcmp(g_arcane_symbol_table.entries[i].name, name) == 0) {
+			return 1;
+		}
+	}
+	return 0;
+}
+
+static ArcaneType infer_expression_type(const char *expr_text) {
+	char expr[256];
+	char *end;
+	ArcaneType t = ARCANE_TYPE_UNKNOWN;
+	size_t len;
+
+	if (!expr_text) {
+		return ARCANE_TYPE_UNKNOWN;
+	}
+
+	while (*expr_text && isspace((unsigned char)*expr_text)) {
+		expr_text++;
+	}
+	len = strcspn(expr_text, "\r\n");
+	while (len > 0 && isspace((unsigned char)expr_text[len - 1])) {
+		len--;
+	}
+	if (len == 0) {
+		return ARCANE_TYPE_UNKNOWN;
+	}
+	if (len >= sizeof(expr)) {
+		len = sizeof(expr) - 1;
+	}
+	memcpy(expr, expr_text, len);
+	expr[len] = '\0';
+
+	if (expr[0] == '"') return ARCANE_TYPE_STRING;
+	if (expr[0] == '\'') return ARCANE_TYPE_CHAR;
+	if (strcmp(expr, "true") == 0 || strcmp(expr, "false") == 0) return ARCANE_TYPE_BOOL;
+
+	if (is_numeric_text(expr)) {
+		if (strchr(expr, '.') || strchr(expr, 'e') || strchr(expr, 'E')) {
+			return ARCANE_TYPE_DOUBLE;
+		}
+		return ARCANE_TYPE_INT;
+	}
+
+	if (strncmp(expr, "POWO(", 5) == 0 || strncmp(expr, "RADIX(", 6) == 0 || strncmp(expr, "LOGUS(", 6) == 0 ||
+		strncmp(expr, "SINUS(", 6) == 0 || strncmp(expr, "COSINUS(", 8) == 0 || strncmp(expr, "TANUS(", 6) == 0 ||
+		strncmp(expr, "FLOORUS(", 8) == 0 || strncmp(expr, "CEILUS(", 7) == 0 || strncmp(expr, "ABSOLUTUS(", 10) == 0) {
+		return ARCANE_TYPE_DOUBLE;
+	}
+
+	if (lookup_symbol(expr) >= 0) {
+		ArcaneType t = ARCANE_TYPE_UNKNOWN;
+		(void)arcane_symbol_get_type(expr, &t);
+		return t;
+	}
+
+	if (is_temp_name_text(expr)) {
+		return ARCANE_TYPE_INT;
+	}
+
+	end = strchr(expr, '(');
+	if (end) {
+		char fn[64];
+		size_t fn_len = (size_t)(end - expr);
+		if (fn_len >= sizeof(fn)) {
+			fn_len = sizeof(fn) - 1;
+		}
+		memcpy(fn, expr, fn_len);
+		fn[fn_len] = '\0';
+		if (arcane_symbol_get_function_signature(fn, &t, NULL, NULL, 0) == ARCANE_SYMBOL_OK) {
+			return t;
+		}
+	}
+
+	return ARCANE_TYPE_UNKNOWN;
+}
+
+static void perform_type_check(void) {
+	int i;
+	int local_errors = 0;
+
+	for (i = 0; i < g_icg.line_count; ++i) {
+		const char *line = g_icg.lines[i];
+		const char *eq;
+		const char *rhs_start;
+		char lhs[64];
+		char rhs[256];
+		ArcaneType lhs_type;
+		ArcaneType rhs_type;
+		size_t lhs_len;
+		size_t rhs_len;
+
+		if (!line || line[0] == '#') {
+			continue;
+		}
+		eq = strchr(line, '=');
+		if (!eq) {
+			continue;
+		}
+
+		lhs_len = (size_t)(eq - line);
+		while (lhs_len > 0 && isspace((unsigned char)line[lhs_len - 1])) {
+			lhs_len--;
+		}
+		if (lhs_len == 0 || lhs_len >= sizeof(lhs)) {
+			continue;
+		}
+		memcpy(lhs, line, lhs_len);
+		lhs[lhs_len] = '\0';
+
+		if (is_temp_name_text(lhs)) {
+			continue;
+		}
+		if (lookup_symbol(lhs) < 0) {
+			continue;
+		}
+
+		rhs_start = eq + 1;
+		while (*rhs_start && isspace((unsigned char)*rhs_start)) {
+			rhs_start++;
+		}
+
+		rhs_len = strcspn(rhs_start, "\r\n");
+		while (rhs_len > 0 && isspace((unsigned char)rhs_start[rhs_len - 1])) {
+			rhs_len--;
+		}
+		if (rhs_len == 0 || rhs_len >= sizeof(rhs)) {
+			continue;
+		}
+		memcpy(rhs, rhs_start, rhs_len);
+		rhs[rhs_len] = '\0';
+
+		lhs_type = ARCANE_TYPE_UNKNOWN;
+		(void)arcane_symbol_get_type(lhs, &lhs_type);
+		rhs_type = infer_expression_type(rhs);
+
+		if (rhs_type != ARCANE_TYPE_UNKNOWN && !arcane_assignment_compatible(lhs_type, rhs_type)) {
+			report_semantic_errorf("Type mismatch for variable '%s': %s <- %s", lhs, arcane_type_name(lhs_type), arcane_type_name(rhs_type));
+			local_errors++;
+		}
+	}
+
+	if (local_errors == 0) {
+		printf("Semantic Check: CHECK_TYPES completed (no additional issues)\n");
+	}
+}
+
+static void perform_declaration_check(void) {
+	int i;
+	int j;
+	int local_errors = 0;
+
+	for (i = 0; i < g_arcane_symbol_table.count; ++i) {
+		ArcaneSymbol *sym = &g_arcane_symbol_table.entries[i];
+		if ((sym->kind == ARCANE_SYMBOL_VARIABLE || sym->kind == ARCANE_SYMBOL_PARAMETER) && sym->used && !sym->initialized) {
+			report_semantic_errorf("Variable '%s' may be used before initialization", sym->name);
+			local_errors++;
+		}
+		if ((sym->kind == ARCANE_SYMBOL_VARIABLE || sym->kind == ARCANE_SYMBOL_PARAMETER) && sym->type == ARCANE_TYPE_UNKNOWN) {
+			report_semantic_errorf("Variable '%s' has unknown type", sym->name);
+			local_errors++;
+		}
+	}
+
+	for (i = 0; i < g_arcane_symbol_table.count; ++i) {
+		for (j = i + 1; j < g_arcane_symbol_table.count; ++j) {
+			ArcaneSymbol *a = &g_arcane_symbol_table.entries[i];
+			ArcaneSymbol *b = &g_arcane_symbol_table.entries[j];
+			if (a->kind != b->kind) continue;
+			if (a->scope_level != b->scope_level) continue;
+			if (strcmp(a->owner_function, b->owner_function) != 0) continue;
+			if (strcmp(a->name, b->name) == 0) {
+				report_semantic_errorf("Duplicate declaration detected for '%s'", a->name);
+				local_errors++;
+			}
+		}
+	}
+
+	for (i = 0; i < g_icg.line_count; ++i) {
+		const char *line = g_icg.lines[i];
+		int k = 0;
+		if (!line || line[0] == '#') continue;
+		while (line[k]) {
+			if (line[k] == '"') {
+				k++;
+				while (line[k] && line[k] != '"') {
+					if (line[k] == '\\' && line[k + 1]) {
+						k += 2;
+					} else {
+						k++;
+					}
+				}
+				if (line[k] == '"') {
+					k++;
+				}
+				continue;
+			}
+			if (isalpha((unsigned char)line[k]) || line[k] == '_') {
+				char tok[64];
+				int t = 0;
+				while ((isalpha((unsigned char)line[k]) || isdigit((unsigned char)line[k]) || line[k] == '_') && t < (int)sizeof(tok) - 1) {
+					tok[t++] = line[k++];
+				}
+				tok[t] = '\0';
+
+				if (strcmp(tok, "ifFalse") == 0 || strcmp(tok, "goto") == 0 || strcmp(tok, "call") == 0 ||
+					strcmp(tok, "func_begin") == 0 || strcmp(tok, "func_end") == 0 || strcmp(tok, "param") == 0 ||
+					strcmp(tok, "arg") == 0 || strcmp(tok, "return") == 0 || strcmp(tok, "print") == 0 ||
+					strcmp(tok, "AND") == 0 || strcmp(tok, "OR") == 0 || strcmp(tok, "NOT") == 0 || strcmp(tok, "XOR") == 0 ||
+					strcmp(tok, "POWO") == 0 || strcmp(tok, "RADIX") == 0 || strcmp(tok, "FLOORUS") == 0 || strcmp(tok, "CEILUS") == 0 ||
+					strcmp(tok, "ABSOLUTUS") == 0 || strcmp(tok, "LOGUS") == 0 || strcmp(tok, "SINUS") == 0 || strcmp(tok, "COSINUS") == 0 || strcmp(tok, "TANUS") == 0 ||
+					is_temp_name_text(tok) || is_label_name_text(tok)) {
+					continue;
+				}
+
+				if (!symbol_exists_any(tok) && strcmp(tok, "true") != 0 && strcmp(tok, "false") != 0) {
+					report_semantic_errorf("Undeclared variable '%s'", tok);
+					local_errors++;
+				}
+				continue;
+			}
+			k++;
+		}
+	}
+
+	if (local_errors == 0) {
+		printf("Semantic Check: CHECK_DECLARATIONS completed (no additional issues)\n");
+	}
 }
 
 static ArcaneExprSem arcane_expr_invalid(void) {
@@ -445,6 +719,56 @@ static ArcaneExprSem arcane_expr_binary_logic(const char *op, ArcaneExprSem left
 	return arcane_expr_make(emit_binary_temp(op, left.place, right.place), ARCANE_TYPE_BOOL, 1);
 }
 
+static ArcaneExprSem arcane_expr_math_call(const char *keyword, ArcaneExprSem arg1, ArcaneExprSem arg2, int arity) {
+	char *temp;
+	ArcaneType result_type;
+
+	if (!arg1.valid || (arity == 2 && !arg2.valid)) {
+		if (arity == 2) {
+			report_semantic_errorf("%s expects 2 arguments", keyword);
+		} else {
+			report_semantic_errorf("%s expects 1 argument", keyword);
+		}
+		free(arg1.place);
+		free(arg2.place);
+		return arcane_expr_invalid();
+	}
+
+	if (!arcane_type_is_numeric(arg1.type) || (arity == 2 && !arcane_type_is_numeric(arg2.type))) {
+		if (arity == 2) {
+			report_semantic_errorf("%s expects numeric arguments", keyword);
+		} else {
+			report_semantic_errorf("%s expects numeric input", keyword);
+		}
+		free(arg1.place);
+		free(arg2.place);
+		return arcane_expr_invalid();
+	}
+
+	temp = icg_new_temp(&g_icg);
+	if (!temp) {
+		free(arg1.place);
+		free(arg2.place);
+		return arcane_expr_invalid();
+	}
+
+	icg_emit_math_call(&g_icg, temp, keyword, arg1.place, (arity == 2 ? arg2.place : NULL), arity);
+
+	result_type = arg1.type;
+	if (arity == 2) {
+		result_type = arcane_numeric_result_type(arg1.type, arg2.type);
+	}
+	if (strcmp(keyword, "RADIX") == 0 || strcmp(keyword, "LOGUS") == 0 || strcmp(keyword, "SINUS") == 0 || strcmp(keyword, "COSINUS") == 0 || strcmp(keyword, "TANUS") == 0) {
+		if (result_type == ARCANE_TYPE_INT || result_type == ARCANE_TYPE_LONG || result_type == ARCANE_TYPE_CHAR) {
+			result_type = ARCANE_TYPE_DOUBLE;
+		}
+	}
+
+	free(arg1.place);
+	free(arg2.place);
+	return arcane_expr_make(temp, result_type, 1);
+}
+
 static char *emit_binary_temp(const char *op, char *left, char *right) {
 	char *temp;
 
@@ -507,6 +831,33 @@ static int scan_char(void);
 #endif
 %}
 
+%code requires {
+#include "../symbol_table/symbol_table.h"
+
+#ifndef ARCANE_PARSER_SEM_TYPES_DEFINED
+#define ARCANE_PARSER_SEM_TYPES_DEFINED
+typedef struct {
+	char *place;
+	ArcaneType type;
+	int valid;
+} ArcaneExprSem;
+
+typedef struct {
+	int count;
+	ArcaneType types[ARCANE_MAX_FUNCTION_PARAMS];
+	char *places[ARCANE_MAX_FUNCTION_PARAMS];
+	int valid;
+} ArcaneArgSem;
+
+typedef struct {
+	int count;
+	char *names[ARCANE_MAX_FUNCTION_PARAMS];
+	ArcaneType types[ARCANE_MAX_FUNCTION_PARAMS];
+	int valid;
+} ArcaneParamSem;
+#endif
+}
+
 %start program
 
 %union {
@@ -527,6 +878,7 @@ static int scan_char(void);
 %token CAST PROPHECY INPUT
 %token POTION ENDPOTION SORTING_HAT ENDHAT CHECK_TYPES CHECK_DECLARATIONS
 %token AND OR NOT XOR
+%token POWO RADIX FLOORUS CEILUS ABSOLUTUS LOGUS SINUS COSINUS TANUS
 %token <sval> IDENTIFIER STRING CHAR_LITERAL BOOL_LITERAL
 %token <ival> NUMBER
 %token EQ NE GE LE
@@ -536,6 +888,7 @@ static int scan_char(void);
 %type <expr> init_opt expr expression expression_opt
 %type <args> arg_list_opt arg_list
 %type <params> param_list_opt param_list param_decl
+%type <sval> check_prefix
 
 %left OR XOR
 %left AND
@@ -664,7 +1017,13 @@ semantic_checks:
 
 semantic_check:
 	  CHECK_TYPES ';'
+	  {
+		perform_type_check();
+	  }
 	| CHECK_DECLARATIONS ';'
+	  {
+		perform_declaration_check();
+	  }
 ;
 
 statements:
@@ -684,7 +1043,6 @@ statement:
 	| break_stmt
 	| continue_stmt
 	| return_stmt
-	| else_block
 ;
 
 declaration:
@@ -902,25 +1260,37 @@ if_stmt:
 		icg_emit_label(&g_icg, $<sval>3);
 		free($<sval>3);
 	}
-	| CHECK expr
+	| check_prefix THEN statements ENDCHECK
+	{
+		icg_emit_label(&g_icg, $1);
+		free($1);
+	}
+	| check_prefix THEN statements ELSE
 	{
 		char *end_label = icg_new_label(&g_icg);
-		if ($2.type != ARCANE_TYPE_BOOL || !$2.valid) {
-			report_semantic_errorf("Condition must be boolean");
-		}
-		icg_emit_if_false(&g_icg, $2.place ? $2.place : "0", end_label);
-		free($2.place);
+		icg_emit_goto(&g_icg, end_label);
+		icg_emit_label(&g_icg, $1);
+		free($1);
 		$<sval>$ = end_label;
 	}
-	THEN statements ENDCHECK
+	statements ENDCHECK
 	{
-		icg_emit_label(&g_icg, $<sval>3);
-		free($<sval>3);
+		icg_emit_label(&g_icg, $<sval>5);
+		free($<sval>5);
 	}
 ;
 
-else_block:
-	ELSE HOUSE statements ENDHOUSE
+check_prefix:
+	CHECK expr
+	{
+		char *false_label = icg_new_label(&g_icg);
+		if ($2.type != ARCANE_TYPE_BOOL || !$2.valid) {
+			report_semantic_errorf("Condition must be boolean");
+		}
+		icg_emit_if_false(&g_icg, $2.place ? $2.place : "0", false_label);
+		free($2.place);
+		$$ = false_label;
+	}
 ;
 
 loop_stmt:
@@ -1146,6 +1516,86 @@ expression:
 	| expression AND expression { $$ = arcane_expr_binary_logic("AND", $1, $3); }
 	| expression OR expression { $$ = arcane_expr_binary_logic("OR", $1, $3); }
 	| expression XOR expression { $$ = arcane_expr_binary_logic("XOR", $1, $3); }
+	| POWO '(' expression ')' {
+		report_semantic_errorf("POWO expects 2 arguments");
+		free($3.place);
+		$$ = arcane_expr_invalid();
+	}
+	| POWO '(' expression ',' expression ')' {
+		$$ = arcane_expr_math_call("POWO", $3, $5, 2);
+	}
+	| RADIX '(' expression ',' expression ')' {
+		report_semantic_errorf("RADIX expects 1 argument");
+		free($3.place);
+		free($5.place);
+		$$ = arcane_expr_invalid();
+	}
+	| RADIX '(' expression ')' {
+		$$ = arcane_expr_math_call("RADIX", $3, arcane_expr_invalid(), 1);
+	}
+	| FLOORUS '(' expression ',' expression ')' {
+		report_semantic_errorf("FLOORUS expects 1 argument");
+		free($3.place);
+		free($5.place);
+		$$ = arcane_expr_invalid();
+	}
+	| FLOORUS '(' expression ')' {
+		$$ = arcane_expr_math_call("FLOORUS", $3, arcane_expr_invalid(), 1);
+	}
+	| CEILUS '(' expression ',' expression ')' {
+		report_semantic_errorf("CEILUS expects 1 argument");
+		free($3.place);
+		free($5.place);
+		$$ = arcane_expr_invalid();
+	}
+	| CEILUS '(' expression ')' {
+		$$ = arcane_expr_math_call("CEILUS", $3, arcane_expr_invalid(), 1);
+	}
+	| ABSOLUTUS '(' expression ',' expression ')' {
+		report_semantic_errorf("ABSOLUTUS expects 1 argument");
+		free($3.place);
+		free($5.place);
+		$$ = arcane_expr_invalid();
+	}
+	| ABSOLUTUS '(' expression ')' {
+		$$ = arcane_expr_math_call("ABSOLUTUS", $3, arcane_expr_invalid(), 1);
+	}
+	| LOGUS '(' expression ',' expression ')' {
+		report_semantic_errorf("LOGUS expects 1 argument");
+		free($3.place);
+		free($5.place);
+		$$ = arcane_expr_invalid();
+	}
+	| LOGUS '(' expression ')' {
+		$$ = arcane_expr_math_call("LOGUS", $3, arcane_expr_invalid(), 1);
+	}
+	| SINUS '(' expression ',' expression ')' {
+		report_semantic_errorf("SINUS expects 1 argument");
+		free($3.place);
+		free($5.place);
+		$$ = arcane_expr_invalid();
+	}
+	| SINUS '(' expression ')' {
+		$$ = arcane_expr_math_call("SINUS", $3, arcane_expr_invalid(), 1);
+	}
+	| COSINUS '(' expression ',' expression ')' {
+		report_semantic_errorf("COSINUS expects 1 argument");
+		free($3.place);
+		free($5.place);
+		$$ = arcane_expr_invalid();
+	}
+	| COSINUS '(' expression ')' {
+		$$ = arcane_expr_math_call("COSINUS", $3, arcane_expr_invalid(), 1);
+	}
+	| TANUS '(' expression ',' expression ')' {
+		report_semantic_errorf("TANUS expects 1 argument");
+		free($3.place);
+		free($5.place);
+		$$ = arcane_expr_invalid();
+	}
+	| TANUS '(' expression ')' {
+		$$ = arcane_expr_math_call("TANUS", $3, arcane_expr_invalid(), 1);
+	}
 	| IDENTIFIER '(' arg_list_opt ')'
 	  {
 		int i;
@@ -1175,7 +1625,11 @@ expression:
 %%
 
 void yyerror(const char *s) {
-	fprintf(stderr, "Parse error: %s\n", s);
+	if (s && strcmp(s, "syntax error") == 0) {
+		fprintf(stderr, "Parse error: syntax error (possible misplaced ELSE or missing ENDCHECK/FI)\n");
+		return;
+	}
+	fprintf(stderr, "Parse error: %s\n", s ? s : "unknown parser error");
 }
 
 #ifndef USE_FLEX_LEXER
@@ -1242,6 +1696,15 @@ static int scan_identifier_or_keyword(int first) {
 	if (strcmp(buffer, WZ_KW_OR) == 0) return OR;
 	if (strcmp(buffer, WZ_KW_NOT) == 0) return NOT;
 	if (strcmp(buffer, WZ_KW_XOR) == 0) return XOR;
+	if (strcmp(buffer, WZ_KW_POWO) == 0) return POWO;
+	if (strcmp(buffer, WZ_KW_RADIX) == 0) return RADIX;
+	if (strcmp(buffer, WZ_KW_FLOORUS) == 0) return FLOORUS;
+	if (strcmp(buffer, WZ_KW_CEILUS) == 0) return CEILUS;
+	if (strcmp(buffer, WZ_KW_ABSOLUTUS) == 0) return ABSOLUTUS;
+	if (strcmp(buffer, WZ_KW_LOGUS) == 0) return LOGUS;
+	if (strcmp(buffer, WZ_KW_SINUS) == 0) return SINUS;
+	if (strcmp(buffer, WZ_KW_COSINUS) == 0) return COSINUS;
+	if (strcmp(buffer, WZ_KW_TANUS) == 0) return TANUS;
 	if (strcmp(buffer, WZ_KW_TRUE) == 0 || strcmp(buffer, WZ_KW_FALSE) == 0) {
 		yylval.sval = arcane_strdup(buffer);
 		return BOOL_LITERAL;

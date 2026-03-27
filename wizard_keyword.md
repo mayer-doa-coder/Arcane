@@ -101,15 +101,15 @@
 ---
 
 ## 📐 Math Functions
-54. POWER                → pow()
-55. ROOT                 → sqrt()
-56. FLOOR                → floor()
-57. CEIL                 → ceil()
-58. ABS                  → abs()
-59. LOG                  → log()
-60. SIN                  → sin()
-61. COS                  → cos()
-62. TAN                  → tan()
+54. POWO                 → pow()
+55. RADIX                → sqrt()
+56. FLOORUS              → floor()
+57. CEILUS               → ceil()
+58. ABSOLUTUS            → abs()
+59. LOGUS                → log()
+60. SINUS                → sin()
+61. COSINUS              → cos()
+62. TANUS                → tan()
 
 ---
 

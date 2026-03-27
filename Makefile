@@ -43,11 +43,13 @@ lexer: $(LEXER_EXEC)
 .PHONY: parser
 parser: $(PARSER_EXEC)
 
-$(PARSER_EXEC): $(PARSER_SOURCE)
+$(PARSER_EXEC): $(PARSER_SOURCE) $(LEXER_SOURCE)
 	@echo "Generating parser from wizard.y..."
 	cd $(PARSER_DIR) && $(BISON) -d wizard.y
+	@echo "Generating lexer from wizard.l..."
+	cd $(LEXER_DIR) && $(LEX) wizard.l
 	@echo "Compiling parser..."
-	cd $(PARSER_DIR) && $(CXX) $(CXXFLAGS) wizard.tab.c ../symbol_table/symbol_table.c ../icg/icg.c ../optimizer/optimizer.c ../codegen/codegen.c -o wizard_parser.exe
+	cd $(PARSER_DIR) && $(CXX) $(CXXFLAGS) -DUSE_FLEX_LEXER wizard.tab.c ../lexer/lex.yy.c ../symbol_table/symbol_table.c ../icg/icg.c ../optimizer/optimizer.c ../codegen/codegen.c -o wizard_parser.exe
 	@echo "Parser built successfully!"
 
 $(PARSER_HEADER): $(PARSER_SOURCE)
@@ -87,9 +89,10 @@ run: $(LEXER_EXEC)
 .PHONY: clean
 clean:
 	@echo "Cleaning generated files..."
+	-$(RM) lex.yy.c wizard.tab.c wizard.tab.h
 	-cd $(LEXER_DIR) && $(RM) lex.yy.c lex.yy.cc wizard_lexer.exe
 	-cd $(PARSER_DIR) && $(RM) *.tab.c *.tab.h *.output lex.yy.c wizard_parser.exe
-	-cd $(OUTPUT_DIR) && $(RM) output.txt
+	-cd $(OUTPUT_DIR) && $(RM) output.txt output.c *.exe *.log
 	@echo "Clean complete!"
 
 # Help
