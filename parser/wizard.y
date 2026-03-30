@@ -31,7 +31,12 @@ int loop_stack_top = -1;
 char *if_false_stack[64];
 char *if_end_stack[64];
 int if_stack_top = -1;
+#define ARCANE_MAX_FUNCTION_NESTING 64
+char function_name_stack[ARCANE_MAX_FUNCTION_NESTING][ARCANE_MAX_NAME_LEN];
+int function_scope_stack[ARCANE_MAX_FUNCTION_NESTING];
+int function_stack_top = -1;
 static char *emit_binary_temp(const char *op, char *left, char *right);
+static void report_semantic_errorf(const char *format, ...);
 
 #ifndef ARCANE_PARSER_SEM_TYPES_DEFINED
 #define ARCANE_PARSER_SEM_TYPES_DEFINED
@@ -89,6 +94,29 @@ static char *arcane_strdup(const char *text) {
 
 static void sync_symbol_context(void) {
 	arcane_symbol_set_context(current_scope_level, current_function_name, (ArcaneHouse)current_house);
+}
+
+static void push_function_context(void) {
+	if (function_stack_top >= ARCANE_MAX_FUNCTION_NESTING - 1) {
+		report_semantic_errorf("Function nesting depth exceeded (max %d)", ARCANE_MAX_FUNCTION_NESTING);
+		return;
+	}
+
+	function_stack_top++;
+	function_scope_stack[function_stack_top] = current_scope_level;
+	arcane_copy_text(function_name_stack[function_stack_top], ARCANE_MAX_NAME_LEN, current_function_name);
+}
+
+static void pop_function_context(void) {
+	if (function_stack_top < 0) {
+		current_scope_level = 0;
+		current_function_name[0] = '\0';
+		return;
+	}
+
+	current_scope_level = function_scope_stack[function_stack_top];
+	arcane_copy_text(current_function_name, sizeof(current_function_name), function_name_stack[function_stack_top]);
+	function_stack_top--;
 }
 
 static void report_semantic_errorf(const char *format, ...) {
@@ -645,16 +673,24 @@ static ArcaneType arcane_validate_function_call(const char *name, ArcaneArgSem a
 }
 
 static void arcane_begin_function_declaration(const char *name, ArcaneType return_type, ArcaneParamSem params) {
+	char parent_function[ARCANE_MAX_NAME_LEN];
+	int function_scope;
 	int existing_index;
+	const char *function_owner;
 	int i;
 	ArcaneType existing_return_type;
 	int existing_param_count;
 	ArcaneType existing_param_types[ARCANE_MAX_FUNCTION_PARAMS];
 
+	arcane_copy_text(parent_function, sizeof(parent_function), current_function_name);
+	function_scope = (parent_function[0] == '\0') ? 0 : current_scope_level;
+	function_owner = (parent_function[0] == '\0') ? "" : parent_function;
+
 	sync_symbol_context();
-	existing_index = arcane_find_global_function(name);
+	existing_index = arcane_find_symbol(name, function_scope, function_owner);
 	if (existing_index >= 0) {
-		if (arcane_symbol_get_function_signature(name, &existing_return_type, &existing_param_count, existing_param_types, ARCANE_MAX_FUNCTION_PARAMS) == ARCANE_SYMBOL_OK) {
+		if (g_arcane_symbol_table.entries[existing_index].kind == ARCANE_SYMBOL_FUNCTION &&
+			arcane_symbol_get_function_signature(name, &existing_return_type, &existing_param_count, existing_param_types, ARCANE_MAX_FUNCTION_PARAMS) == ARCANE_SYMBOL_OK) {
 			int consistent = 1;
 			if (existing_return_type != return_type || existing_param_count != params.count) {
 				consistent = 0;
@@ -675,7 +711,7 @@ static void arcane_begin_function_declaration(const char *name, ArcaneType retur
 		}
 	} else {
 		int function_insert_result;
-		function_insert_result = arcane_insert_symbol(name, ARCANE_SYMBOL_FUNCTION, return_type, (ArcaneHouse)current_house, 0, "", 0);
+		function_insert_result = arcane_insert_symbol(name, ARCANE_SYMBOL_FUNCTION, return_type, (ArcaneHouse)current_house, function_scope, function_owner, 0);
 		if (function_insert_result != ARCANE_SYMBOL_OK) {
 			report_semantic_error("duplicate function", name);
 		} else {
@@ -683,8 +719,9 @@ static void arcane_begin_function_declaration(const char *name, ArcaneType retur
 		}
 	}
 
+	push_function_context();
 	arcane_copy_text(current_function_name, sizeof(current_function_name), name);
-	current_scope_level = 1;
+	current_scope_level = function_scope + 1;
 	sync_symbol_context();
 	icg_emit_func_begin(&g_icg, current_function_name);
 
@@ -703,6 +740,19 @@ static void arcane_begin_function_declaration(const char *name, ArcaneType retur
 		}
 		icg_emit_param(&g_icg, params.names[i]);
 	}
+}
+
+static void arcane_end_function_declaration(void) {
+	char finished_name[ARCANE_MAX_NAME_LEN];
+
+	if (current_function_name[0] == '\0') {
+		return;
+	}
+
+	arcane_copy_text(finished_name, sizeof(finished_name), current_function_name);
+	icg_emit_func_end(&g_icg, finished_name);
+	pop_function_context();
+	sync_symbol_context();
 }
 
 static ArcaneExprSem arcane_expr_binary_logic(const char *op, ArcaneExprSem left, ArcaneExprSem right) {
@@ -910,6 +960,7 @@ program:
 		icg_reset(&g_icg);
 		loop_stack_top = -1;
 		if_stack_top = -1;
+		function_stack_top = -1;
 		current_scope_level = 0;
 		current_function_name[0] = '\0';
 		sync_symbol_context();
@@ -983,10 +1034,7 @@ function:
 	  }
 	  HOUSE statements ENDSPELL
 	  {
-		icg_emit_func_end(&g_icg, current_function_name);
-		current_scope_level = 0;
-		current_function_name[0] = '\0';
-		sync_symbol_context();
+		arcane_end_function_declaration();
 	  }
 	| SPELL IDENTIFIER function_return_opt
 	  {
@@ -999,10 +1047,7 @@ function:
 	  }
 	  HOUSE statements ENDSPELL
 	  {
-		icg_emit_func_end(&g_icg, current_function_name);
-		current_scope_level = 0;
-		current_function_name[0] = '\0';
-		sync_symbol_context();
+		arcane_end_function_declaration();
 	  }
 	| SPELL IDENTIFIER function_return_opt
 	  {
@@ -1015,10 +1060,7 @@ function:
 	  }
 	  statements ENDSPELL
 	  {
-		icg_emit_func_end(&g_icg, current_function_name);
-		current_scope_level = 0;
-		current_function_name[0] = '\0';
-		sync_symbol_context();
+		arcane_end_function_declaration();
 	  }
 ;
 

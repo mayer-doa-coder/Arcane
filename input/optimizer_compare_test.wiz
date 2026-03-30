@@ -8,5 +8,9 @@ a = 5 + 3;
 b = a + 0;
 c = b * 1;
 
+CAST a;
+CAST b;
+CAST c;
+
 ENDHOUSE
 EXIT_HOGWARTS

@@ -24,6 +24,19 @@ PARSER_OUTPUT = $(PARSER_DIR)/wizard.tab.c
 PARSER_HEADER = $(PARSER_DIR)/wizard.tab.h
 PARSER_EXEC = $(PARSER_DIR)/wizard_parser.exe
 
+PARSER_BUILD_SOURCES = $(PARSER_SOURCE) $(LEXER_SOURCE) \
+	symbol_table/symbol_table.c \
+	icg/icg.c \
+	optimizer/optimizer.c \
+	codegen/codegen.c
+
+PARSER_BUILD_HEADERS = $(PARSER_HEADER) \
+	lexer/tokens.h \
+	symbol_table/symbol_table.h \
+	icg/icg.h \
+	optimizer/optimizer.h \
+	codegen/codegen.h
+
 SAMPLE_INPUT = $(INPUT_DIR)/sample.wiz
 OUTPUT_FILE = $(OUTPUT_DIR)/output.txt
 
@@ -43,7 +56,7 @@ lexer: $(LEXER_EXEC)
 .PHONY: parser
 parser: $(PARSER_EXEC)
 
-$(PARSER_EXEC): $(PARSER_SOURCE) $(LEXER_SOURCE)
+$(PARSER_EXEC): $(PARSER_BUILD_SOURCES) $(PARSER_BUILD_HEADERS)
 	@echo "Generating parser from wizard.y..."
 	cd $(PARSER_DIR) && $(BISON) -d wizard.y
 	@echo "Generating lexer from wizard.l..."

@@ -5,6 +5,39 @@ static int g_current_scope_level = 0;
 static ArcaneHouse g_current_house = ARCANE_HOUSE_NONE;
 static char g_current_owner_function[ARCANE_MAX_NAME_LEN] = "";
 
+static int arcane_find_visible_function(const char *name) {
+    int i;
+
+    if (!name || name[0] == '\0') {
+        return ARCANE_SYMBOL_INVALID;
+    }
+
+    for (i = g_arcane_symbol_table.count - 1; i >= 0; --i) {
+        ArcaneSymbol *symbol = &g_arcane_symbol_table.entries[i];
+        if (symbol->kind != ARCANE_SYMBOL_FUNCTION) {
+            continue;
+        }
+        if (strcmp(symbol->name, name) != 0) {
+            continue;
+        }
+        if (g_current_scope_level < symbol->scope_level) {
+            continue;
+        }
+
+        if (g_current_owner_function[0] != '\0') {
+            if (symbol->owner_function[0] == '\0' ||
+                strcmp(symbol->owner_function, g_current_owner_function) == 0 ||
+                strcmp(symbol->name, g_current_owner_function) == 0) {
+                return i;
+            }
+        } else if (symbol->owner_function[0] == '\0') {
+            return i;
+        }
+    }
+
+    return ARCANE_SYMBOL_INVALID;
+}
+
 static int arcane_map_add_result(int add_result) {
     if (add_result >= 0) {
         return ARCANE_SYMBOL_OK;
@@ -260,7 +293,10 @@ int arcane_symbol_set_function_signature(const char *name, ArcaneType return_typ
         return ARCANE_SYMBOL_INVALID;
     }
 
-    function_index = arcane_find_global_function(name);
+    function_index = arcane_find_visible_function(name);
+    if (function_index < 0) {
+        function_index = arcane_find_global_function(name);
+    }
     if (function_index < 0) {
         return ARCANE_SYMBOL_INVALID;
     }
@@ -282,7 +318,10 @@ int arcane_symbol_get_function_signature(const char *name, ArcaneType *return_ty
     int i;
     int copy_count;
 
-    function_index = arcane_find_global_function(name);
+    function_index = arcane_find_visible_function(name);
+    if (function_index < 0) {
+        function_index = arcane_find_global_function(name);
+    }
     if (function_index < 0) {
         return ARCANE_SYMBOL_INVALID;
     }

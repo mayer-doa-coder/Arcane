@@ -10,6 +10,8 @@ typedef struct {
     int count;
 } ArcanePendingArgs;
 
+static int find_matching_function_end(const ArcaneICG *icg, int begin_index, const char *function_name);
+
 static const char *to_c_type(ArcaneType type) {
     switch (type) {
         case ARCANE_TYPE_FLOAT: return "float";
@@ -223,8 +225,38 @@ static int find_function_symbol(const ArcaneSymbolTable *symbols, const char *fu
 
     for (i = 0; i < symbols->count; ++i) {
         const ArcaneSymbol *symbol = &symbols->entries[i];
-        if (symbol->kind == ARCANE_SYMBOL_FUNCTION && symbol->scope_level == 0 && symbol->owner_function[0] == '\0' && strcmp(symbol->name, function_name) == 0) {
+        if (symbol->kind == ARCANE_SYMBOL_FUNCTION && strcmp(symbol->name, function_name) == 0) {
             return i;
+        }
+    }
+
+    return -1;
+}
+
+static int find_matching_function_end(const ArcaneICG *icg, int begin_index, const char *function_name) {
+    int i;
+    int nested_depth = 0;
+
+    if (!icg || !function_name || begin_index < 0 || begin_index >= icg->line_count) {
+        return -1;
+    }
+
+    for (i = begin_index + 1; i < icg->line_count; ++i) {
+        char nested_name[64];
+        char end_name[64];
+
+        if (parse_function_marker(icg->lines[i], "func_begin ", nested_name, sizeof(nested_name))) {
+            nested_depth++;
+            continue;
+        }
+
+        if (parse_function_marker(icg->lines[i], "func_end ", end_name, sizeof(end_name))) {
+            if (nested_depth == 0 && strcmp(end_name, function_name) == 0) {
+                return i;
+            }
+            if (nested_depth > 0) {
+                nested_depth--;
+            }
         }
     }
 
@@ -307,6 +339,15 @@ static void emit_temp_declarations_for_range(FILE *fp, const ArcaneSymbolTable *
     for (i = start_index; i <= end_index && i < icg->line_count; ++i) {
         char lhs_name[64];
         const char *line = icg->lines[i];
+        char nested_name[64];
+
+        if (parse_function_marker(line, "func_begin ", nested_name, sizeof(nested_name))) {
+            int nested_end = find_matching_function_end(icg, i, nested_name);
+            if (nested_end > i) {
+                i = nested_end;
+                continue;
+            }
+        }
 
         if (!line || (!should_emit_assignment(line) && !line_is_call_assignment(line))) {
             continue;
@@ -539,9 +580,9 @@ static void emit_ir_line_as_c(FILE *fp, const char *line, ArcanePendingArgs *pen
 }
 
 static void emit_function_definitions(FILE *fp, const ArcaneSymbolTable *symbols, const ArcaneICG *icg) {
-    int i = 0;
+    int i;
 
-    while (i < icg->line_count) {
+    for (i = 0; i < icg->line_count; ++i) {
         char function_name[64];
         int function_symbol_index;
         int end_index;
@@ -549,23 +590,17 @@ static void emit_function_definitions(FILE *fp, const ArcaneSymbolTable *symbols
         ArcanePendingArgs pending;
 
         if (!parse_function_marker(icg->lines[i], "func_begin ", function_name, sizeof(function_name))) {
-            i++;
             continue;
         }
 
         function_symbol_index = find_function_symbol(symbols, function_name);
         if (function_symbol_index < 0) {
-            i++;
             continue;
         }
 
-        end_index = i + 1;
-        while (end_index < icg->line_count) {
-            char end_name[64];
-            if (parse_function_marker(icg->lines[end_index], "func_end ", end_name, sizeof(end_name)) && strcmp(end_name, function_name) == 0) {
-                break;
-            }
-            end_index++;
+        end_index = find_matching_function_end(icg, i, function_name);
+        if (end_index < 0) {
+            continue;
         }
 
         emit_function_signature(fp, &symbols->entries[function_symbol_index], symbols, 0);
@@ -578,9 +613,19 @@ static void emit_function_definitions(FILE *fp, const ArcaneSymbolTable *symbols
         fprintf(fp, "\n");
 
         for (int k = i + 1; k < end_index; ++k) {
+            char nested_name[64];
             if (starts_with(icg->lines[k], "return")) {
                 has_explicit_return = 1;
             }
+
+            if (parse_function_marker(icg->lines[k], "func_begin ", nested_name, sizeof(nested_name))) {
+                int nested_end = find_matching_function_end(icg, k, nested_name);
+                if (nested_end > k) {
+                    k = nested_end;
+                    continue;
+                }
+            }
+
             emit_ir_line_as_c(fp, icg->lines[k], &pending);
         }
 
@@ -595,7 +640,6 @@ static void emit_function_definitions(FILE *fp, const ArcaneSymbolTable *symbols
         }
 
         fprintf(fp, "}\n\n");
-        i = (end_index < icg->line_count) ? end_index + 1 : icg->line_count;
     }
 }
 
@@ -713,7 +757,7 @@ int generate_c_code(const ArcaneSymbolTable *symbols, const ArcaneICG *icg, cons
 
     for (i = 0; i < symbols->count; ++i) {
         const ArcaneSymbol *symbol = &symbols->entries[i];
-        if (symbol->kind == ARCANE_SYMBOL_FUNCTION && symbol->scope_level == 0 && symbol->owner_function[0] == '\0') {
+        if (symbol->kind == ARCANE_SYMBOL_FUNCTION) {
             emit_function_signature(fp, symbol, symbols, 1);
         }
     }
