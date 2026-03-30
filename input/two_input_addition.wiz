@@ -1,0 +1,16 @@
+ENTER_HOGWARTS
+HOUSE Gryffindor
+DECLARE a AS INT;
+DECLARE b AS INT;
+DECLARE sum AS INT := 0;
+
+CAST "Enter first number:";
+INPUT(a);
+CAST "Enter second number:";
+INPUT(b);
+
+sum = a + b;
+CAST "Sum:";
+CAST sum;
+ENDHOUSE
+EXIT_HOGWARTS

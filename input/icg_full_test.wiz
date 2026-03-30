@@ -14,16 +14,19 @@ ENDHOUSE
 HOUSE Hufflepuff
 IF_CHARM max > b THEN
 max = max + 1;
+CAST max
 END_CHARM
 
 IF_CHARM a < b THEN
 max = max + b;
+CAST max
 END_CHARM
 ENDHOUSE
 
 HOUSE Ravenclaw
 TIME_TURNER cnt < 3 BEGIN_LOOP
 cnt = cnt + 1;
+CAST cnt
 END_TIME_TURNER
 ENDHOUSE
 EXIT_HOGWARTS

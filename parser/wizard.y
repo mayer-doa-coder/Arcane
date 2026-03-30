@@ -426,7 +426,7 @@ static void perform_declaration_check(void) {
 
 				if (strcmp(tok, "ifFalse") == 0 || strcmp(tok, "goto") == 0 || strcmp(tok, "call") == 0 ||
 					strcmp(tok, "func_begin") == 0 || strcmp(tok, "func_end") == 0 || strcmp(tok, "param") == 0 ||
-					strcmp(tok, "arg") == 0 || strcmp(tok, "return") == 0 || strcmp(tok, "print") == 0 ||
+					strcmp(tok, "arg") == 0 || strcmp(tok, "return") == 0 || strcmp(tok, "print") == 0 || strcmp(tok, "input") == 0 ||
 					strcmp(tok, "AND") == 0 || strcmp(tok, "OR") == 0 || strcmp(tok, "NOT") == 0 || strcmp(tok, "XOR") == 0 ||
 					strcmp(tok, "POWO") == 0 || strcmp(tok, "RADIX") == 0 || strcmp(tok, "FLOORUS") == 0 || strcmp(tok, "CEILUS") == 0 ||
 					strcmp(tok, "ABSOLUTUS") == 0 || strcmp(tok, "LOGUS") == 0 || strcmp(tok, "SINUS") == 0 || strcmp(tok, "COSINUS") == 0 || strcmp(tok, "TANUS") == 0 ||
@@ -1272,6 +1272,7 @@ input_stmt:
 		if (symbol_index < 0) {
 			report_semantic_error("undeclared variable", $3);
 		} else {
+			icg_emit_input(&g_icg, $3);
 			arcane_symbol_table_mark_initialized(&g_arcane_symbol_table, symbol_index);
 		}
 		free($3);

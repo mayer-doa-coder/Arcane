@@ -146,6 +146,11 @@ SUMMON total : INT := power + bonus;
 PROPHECY(total);
 ENDHOUSE
 EXIT_HOGWARTS</textarea>
+        <div class="mt-4 rounded-sm border border-outline/40 bg-surface-high/60 p-4">
+          <h3 class="mb-2 font-label text-xs uppercase tracking-[0.15em] text-on-surface-variant">Program Input (stdin)</h3>
+          <p class="mb-3 text-xs text-on-surface-variant/80">Enter runtime values in execution order. Use one value per line.</p>
+          <textarea id="runtime-input" class="min-h-[110px] w-full rounded-sm border border-outline/50 bg-surface-high p-3 font-mono text-xs text-on-surface focus:border-primary focus:outline-none" spellcheck="false" placeholder="Example for two inputs:\n7\n5"></textarea>
+        </div>
         <div class="mt-4 flex flex-wrap items-center gap-4">
           <button id="run-compiler" class="rounded-sm bg-primary-container px-6 py-3 font-label text-xs font-bold tracking-[0.15em] text-[#3c2f00] transition hover:brightness-110">RUN COMPILER</button>
           <label class="flex items-center gap-2 text-xs text-on-surface-variant">
@@ -221,6 +226,7 @@ EXIT_HOGWARTS</textarea>
     const apiBase = window.location.protocol === "file:" ? "http://localhost:4000" : window.location.origin;
     const runButton = document.getElementById("run-compiler");
     const codeInput = document.getElementById("wizard-code");
+    const runtimeInput = document.getElementById("runtime-input");
     const includeTokens = document.getElementById("include-tokens");
     const runStatus = document.getElementById("run-status");
 
@@ -329,6 +335,7 @@ EXIT_HOGWARTS</textarea>
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             code: codeInput.value,
+            runtimeInput: runtimeInput.value,
             includeTokens: includeTokens.checked
           })
         });

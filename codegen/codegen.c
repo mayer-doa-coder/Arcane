@@ -419,6 +419,48 @@ static void pending_args_push(ArcanePendingArgs *pending, const char *arg_expr) 
     pending->count++;
 }
 
+static ArcaneType find_visible_variable_type(const ArcaneSymbolTable *symbols, const char *name, const char *owner_function) {
+    int i;
+
+    if (!symbols || !name || name[0] == '\0') {
+        return ARCANE_TYPE_UNKNOWN;
+    }
+
+    for (i = symbols->count - 1; i >= 0; --i) {
+        const ArcaneSymbol *symbol = &symbols->entries[i];
+        if (symbol->kind != ARCANE_SYMBOL_VARIABLE && symbol->kind != ARCANE_SYMBOL_PARAMETER) {
+            continue;
+        }
+        if (strcmp(symbol->name, name) != 0) {
+            continue;
+        }
+
+        if (owner_function && owner_function[0] != '\0') {
+            if (strcmp(symbol->owner_function, owner_function) == 0 || symbol->owner_function[0] == '\0') {
+                return symbol->type;
+            }
+        } else if (symbol->owner_function[0] == '\0') {
+            return symbol->type;
+        }
+    }
+
+    return ARCANE_TYPE_UNKNOWN;
+}
+
+static const char *input_scan_format_for_type(ArcaneType type) {
+    switch (type) {
+        case ARCANE_TYPE_FLOAT: return "%f";
+        case ARCANE_TYPE_DOUBLE: return "%lf";
+        case ARCANE_TYPE_LONG: return "%ld";
+        case ARCANE_TYPE_CHAR: return " %c";
+        case ARCANE_TYPE_BOOL: return "%d";
+        case ARCANE_TYPE_INT:
+        case ARCANE_TYPE_UNKNOWN:
+        default:
+            return "%d";
+    }
+}
+
 static void emit_call_from_pending(FILE *fp, ArcanePendingArgs *pending, const char *target, const char *function_name, int arg_count) {
     int i;
 
@@ -444,7 +486,7 @@ static void emit_call_from_pending(FILE *fp, ArcanePendingArgs *pending, const c
     pending_args_reset(pending);
 }
 
-static void emit_ir_line_as_c(FILE *fp, const char *line, ArcanePendingArgs *pending) {
+static void emit_ir_line_as_c(FILE *fp, const ArcaneSymbolTable *symbols, const char *owner_function, const char *line, ArcanePendingArgs *pending) {
     size_t len;
 
     if (!fp || !line || !pending) {
@@ -469,6 +511,16 @@ static void emit_ir_line_as_c(FILE *fp, const char *line, ArcanePendingArgs *pen
         char arg_expr[128];
         if (sscanf(line + 4, "%127[^\r\n]", arg_expr) == 1) {
             pending_args_push(pending, arg_expr);
+        }
+        return;
+    }
+
+    if (starts_with(line, "input ")) {
+        char target[64];
+        if (sscanf(line + 6, "%63s", target) == 1) {
+            ArcaneType target_type = find_visible_variable_type(symbols, target, owner_function);
+            const char *format = input_scan_format_for_type(target_type);
+            fprintf(fp, "    scanf(\"%s\", &%s);\n", format, target);
         }
         return;
     }
@@ -626,7 +678,7 @@ static void emit_function_definitions(FILE *fp, const ArcaneSymbolTable *symbols
                 }
             }
 
-            emit_ir_line_as_c(fp, icg->lines[k], &pending);
+            emit_ir_line_as_c(fp, symbols, function_name, icg->lines[k], &pending);
         }
 
         if (!has_explicit_return && (symbols->entries[function_symbol_index].type == ARCANE_TYPE_INT ||
@@ -713,7 +765,7 @@ static void emit_main_temps(FILE *fp, const ArcaneSymbolTable *symbols, const Ar
     }
 }
 
-static void emit_main_body(FILE *fp, const ArcaneICG *icg) {
+static void emit_main_body(FILE *fp, const ArcaneSymbolTable *symbols, const ArcaneICG *icg) {
     int i = 0;
     ArcanePendingArgs pending;
 
@@ -734,7 +786,7 @@ static void emit_main_body(FILE *fp, const ArcaneICG *icg) {
             continue;
         }
 
-        emit_ir_line_as_c(fp, icg->lines[i], &pending);
+        emit_ir_line_as_c(fp, symbols, "", icg->lines[i], &pending);
         i++;
     }
 }
@@ -769,7 +821,7 @@ int generate_c_code(const ArcaneSymbolTable *symbols, const ArcaneICG *icg, cons
     emit_main_variable_declarations(fp, symbols);
     emit_main_temps(fp, symbols, icg);
     fprintf(fp, "\n");
-    emit_main_body(fp, icg);
+    emit_main_body(fp, symbols, icg);
     fprintf(fp, "\n    return 0;\n");
     fprintf(fp, "}\n");
 

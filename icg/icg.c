@@ -284,6 +284,14 @@ void icg_emit_return(ArcaneICG *icg, const char *value_place) {
     icg_emit(icg, "return %s\n", value_place);
 }
 
+void icg_emit_input(ArcaneICG *icg, const char *target) {
+    if (!target || target[0] == '\0') {
+        return;
+    }
+
+    icg_emit(icg, "input %s\n", target);
+}
+
 void icg_emit_math_call(ArcaneICG *icg, const char *target, const char *function_name, const char *arg1, const char *arg2, int arg_count) {
     if (!target || !function_name || !arg1) {
         return;

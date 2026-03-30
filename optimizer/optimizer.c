@@ -131,6 +131,7 @@ static int line_is_unsafe_for_optimization(const char *line) {
         strncmp(trimmed, "func_begin ", 11) == 0 ||
         strncmp(trimmed, "func_end ", 9) == 0 ||
         strncmp(trimmed, "param ", 6) == 0 ||
+        strncmp(trimmed, "input ", 6) == 0 ||
         strncmp(trimmed, "arg ", 4) == 0 ||
         strncmp(trimmed, "call ", 5) == 0 ||
         strncmp(trimmed, "return", 6) == 0 ||

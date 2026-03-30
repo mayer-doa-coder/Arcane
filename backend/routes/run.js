@@ -14,6 +14,7 @@ const LEXER_EXE = process.platform === "win32" ? "wizard_lexer.exe" : "wizard_le
 const COMPILED_OUT = process.platform === "win32" ? "program.exe" : "program.out";
 
 const MAX_SOURCE_BYTES = 100_000;
+const MAX_RUNTIME_INPUT_BYTES = 20_000;
 const PROCESS_TIMEOUT_MS = 7_000;
 
 let runQueue = Promise.resolve();
@@ -89,6 +90,12 @@ function spawnWithCapture(command, args, options = {}) {
       stderr += chunk.toString();
     });
 
+    child.stdin.on("error", () => {});
+    if (typeof options.stdin === "string" && options.stdin.length > 0) {
+      child.stdin.write(options.stdin);
+    }
+    child.stdin.end();
+
     child.on("close", (code) => {
       clearTimeout(timer);
       resolve({ code, stdout, stderr, timedOut });
@@ -101,7 +108,7 @@ function spawnWithCapture(command, args, options = {}) {
   });
 }
 
-async function compileAndRunC(tempDir, cCode) {
+async function compileAndRunC(tempDir, cCode, runtimeInput) {
   if (!cCode || !cCode.trim()) {
     return { output: "", error: "No generated C code found.", success: false };
   }
@@ -140,6 +147,7 @@ async function compileAndRunC(tempDir, cCode) {
 
   const runRes = await spawnWithCapture(runCmd, runArgs, {
     cwd: tempDir,
+    stdin: runtimeInput,
     timeoutMs: PROCESS_TIMEOUT_MS
   });
 
@@ -159,7 +167,7 @@ async function compileAndRunC(tempDir, cCode) {
   };
 }
 
-async function runCompilerPipeline(sourceCode, includeTokens) {
+async function runCompilerPipeline(sourceCode, includeTokens, runtimeInput) {
   await fs.mkdir(TEMP_ROOT, { recursive: true });
   const tempDir = await fs.mkdtemp(path.join(TEMP_ROOT, `run-${Date.now()}-${os.tmpdir().split(path.sep).pop()}-`));
 
@@ -214,7 +222,7 @@ async function runCompilerPipeline(sourceCode, includeTokens) {
   };
 
   if (!parserRes.timedOut && parseSuccessful && errors.length === 0 && cCode.trim()) {
-    execution = await compileAndRunC(tempDir, cCode);
+    execution = await compileAndRunC(tempDir, cCode, runtimeInput);
   }
 
   const success = !parserRes.timedOut && parseSuccessful && errors.length === 0;
@@ -238,8 +246,8 @@ async function runCompilerPipeline(sourceCode, includeTokens) {
   };
 }
 
-async function queueRun(sourceCode, includeTokens) {
-  const next = runQueue.then(() => runCompilerPipeline(sourceCode, includeTokens));
+async function queueRun(sourceCode, includeTokens, runtimeInput) {
+  const next = runQueue.then(() => runCompilerPipeline(sourceCode, includeTokens, runtimeInput));
   runQueue = next.catch(() => {});
   return next;
 }
@@ -248,6 +256,7 @@ module.exports = function registerRunRoute(app) {
   app.post("/run", async (req, res) => {
     const sourceCode = typeof req.body?.code === "string" ? req.body.code : "";
     const includeTokens = Boolean(req.body?.includeTokens);
+    const runtimeInput = typeof req.body?.runtimeInput === "string" ? req.body.runtimeInput : "";
 
     if (!sourceCode.trim()) {
       return res.status(400).json({
@@ -263,8 +272,15 @@ module.exports = function registerRunRoute(app) {
       });
     }
 
+    if (Buffer.byteLength(runtimeInput, "utf8") > MAX_RUNTIME_INPUT_BYTES) {
+      return res.status(413).json({
+        success: false,
+        errors: [{ type: "input", line: null, message: "Runtime input is too large." }]
+      });
+    }
+
     try {
-      const result = await queueRun(sourceCode, includeTokens);
+      const result = await queueRun(sourceCode, includeTokens, runtimeInput);
       return res.json(result);
     } catch (err) {
       return res.status(500).json({
