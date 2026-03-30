@@ -4,30 +4,18 @@ HOUSE Gryffindor
 DECLARE i AS INT := 1;
 ENDHOUSE
 
-Slytherin
+HOUSE Slytherin
 SPELL showPrime WITH (x) HOUSE
 CAST x;
 ENDSPELL
+ENDHOUSE
 
-Ravenclaw TIME_TURNER i < 11 BEGIN_LOOP
-IF_CHARM i == 2 THEN
+HOUSE Ravenclaw
+TIME_TURNER i < 11 BEGIN_LOOP
 SUMMON showPrime WITH (i);
-END_CHARM
-
-IF_CHARM i == 3 THEN
-SUMMON showPrime WITH (i);
-END_CHARM
-
-IF_CHARM i == 5 THEN
-SUMMON showPrime WITH (i);
-END_CHARM
-
-IF_CHARM i == 7 THEN
-SUMMON showPrime WITH (i);
-END_CHARM
-
 i = i + 1;
 END_TIME_TURNER
+ENDHOUSE
 
 HOUSE Hufflepuff
 IF_CHARM i == 11 THEN

@@ -974,6 +974,9 @@ sorting_hat_block:
 function:
 	  SPELL IDENTIFIER function_return_opt WITH '(' param_list_opt ')'
 	  {
+		if (current_house != 2) {
+			report_semantic_errorf("function definition is only allowed in Slytherin (current: %s)", house_name_from_id(current_house));
+		}
 		arcane_begin_function_declaration($2, (ArcaneType)$3, $6);
 		arcane_params_release(&$6);
 		free($2);
@@ -988,6 +991,9 @@ function:
 	| SPELL IDENTIFIER function_return_opt
 	  {
 		ArcaneParamSem no_params = arcane_params_empty();
+		if (current_house != 2) {
+			report_semantic_errorf("function definition is only allowed in Slytherin (current: %s)", house_name_from_id(current_house));
+		}
 		arcane_begin_function_declaration($2, (ArcaneType)$3, no_params);
 		free($2);
 	  }
@@ -1001,6 +1007,9 @@ function:
 	| SPELL IDENTIFIER function_return_opt
 	  {
 		ArcaneParamSem no_params = arcane_params_empty();
+		if (current_house != 2) {
+			report_semantic_errorf("function definition is only allowed in Slytherin (current: %s)", house_name_from_id(current_house));
+		}
 		arcane_begin_function_declaration($2, (ArcaneType)$3, no_params);
 		free($2);
 	  }
@@ -1257,6 +1266,9 @@ if_stmt:
 	{
 		char *false_label = icg_new_label(&g_icg);
 		char *end_label = icg_new_label(&g_icg);
+		if (current_house != 3) {
+			report_semantic_errorf("IF_CHARM is only allowed in Hufflepuff (current: %s)", house_name_from_id(current_house));
+		}
 		if ($2.type != ARCANE_TYPE_BOOL || !$2.valid) {
 			report_semantic_errorf("Condition must be boolean");
 		}
@@ -1331,6 +1343,9 @@ loop_stmt:
 	{
 		char *loop_start = icg_new_label(&g_icg);
 		char *loop_end = icg_new_label(&g_icg);
+		if (current_house != 4) {
+			report_semantic_errorf("TIME_TURNER loop is only allowed in Ravenclaw (current: %s)", house_name_from_id(current_house));
+		}
 		if (loop_start && loop_end && loop_stack_top < 63) {
 			loop_stack_top++;
 			loop_start_stack[loop_stack_top] = loop_start;

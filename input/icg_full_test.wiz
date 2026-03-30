@@ -9,7 +9,9 @@ max = a + b;
 max = max * b;
 max = max - a;
 max = max / a;
+ENDHOUSE
 
+HOUSE Hufflepuff
 IF_CHARM max > b THEN
 max = max + 1;
 END_CHARM
@@ -17,9 +19,11 @@ END_CHARM
 IF_CHARM a < b THEN
 max = max + b;
 END_CHARM
+ENDHOUSE
+
+HOUSE Ravenclaw
 TIME_TURNER cnt < 3 BEGIN_LOOP
 cnt = cnt + 1;
 END_TIME_TURNER
-
 ENDHOUSE
 EXIT_HOGWARTS

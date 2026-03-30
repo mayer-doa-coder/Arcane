@@ -2,6 +2,9 @@ ENTER_HOGWARTS
 HOUSE Gryffindor
 DECLARE result AS INT := 0;
 result = 5 + 3;
+ENDHOUSE
+
+HOUSE Hufflepuff
 IF_CHARM 10 > 2 THEN
 result = result + 1;
 END_CHARM

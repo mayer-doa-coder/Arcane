@@ -119,3 +119,10 @@ After Step E:
 - If `bison` fails with `m4` path errors, re-check Step B env vars.
 - If `output/output.c` is missing, Step D did not complete successfully.
 - If C compile fails in Step E, open and inspect `d:\Arcane\output\output.c`.
+
+
+Push-Location parser
+./wizard_parser.exe ../input/grade_valid_medium_condition_assign.wiz
+g++ -Wall ../output/output.c -o ../output/day5_run.exe
+../output/day5_run.exe
+Pop-Location

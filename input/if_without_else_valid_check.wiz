@@ -2,9 +2,15 @@ ENTER_HOGWARTS
 HOUSE Gryffindor
 DECLARE a AS INT := 5;
 DECLARE b AS INT := 2;
+ENDHOUSE
+
+HOUSE Hufflepuff
 IF_CHARM a > b THEN
 a = b;
 END_CHARM
+ENDHOUSE
+
+HOUSE Gryffindor
 CAST a;
 CAST b;
 ENDHOUSE

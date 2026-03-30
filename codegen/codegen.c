@@ -182,6 +182,7 @@ static int line_is_function_marker(const char *line) {
 }
 
 static int line_is_main_ir(const char *line) {
+    
     return line && !line_is_function_marker(line);
 }
 
@@ -195,6 +196,22 @@ static int parse_function_marker(const char *line, const char *prefix, char *nam
     }
 
     return sscanf(line + strlen(prefix), "%63s", name_out) == 1;
+}
+
+static int line_has_float_math_rhs(const char *line) {
+    if (!line) {
+        return 0;
+    }
+
+    return strstr(line, "POWO(") != NULL ||
+        strstr(line, "RADIX(") != NULL ||
+        strstr(line, "FLOORUS(") != NULL ||
+        strstr(line, "CEILUS(") != NULL ||
+        strstr(line, "ABSOLUTUS(") != NULL ||
+        strstr(line, "LOGUS(") != NULL ||
+        strstr(line, "SINUS(") != NULL ||
+        strstr(line, "COSINUS(") != NULL ||
+        strstr(line, "TANUS(") != NULL;
 }
 
 static int find_function_symbol(const ArcaneSymbolTable *symbols, const char *function_name) {
@@ -302,6 +319,7 @@ static void emit_temp_declarations_for_range(FILE *fp, const ArcaneSymbolTable *
         if (is_temp_symbol(lhs_name)) {
             int seen = 0;
             int j;
+            const char *temp_type = line_has_float_math_rhs(line) ? "double" : "int";
             for (j = 0; j < declared_count; ++j) {
                 if (strcmp(declared[j], lhs_name) == 0) {
                     seen = 1;
@@ -311,7 +329,7 @@ static void emit_temp_declarations_for_range(FILE *fp, const ArcaneSymbolTable *
             if (seen) {
                 continue;
             }
-            fprintf(fp, "    int %s;\n", lhs_name);
+            fprintf(fp, "    %s %s;\n", temp_type, lhs_name);
             if (declared_count < ARCANE_MAX_SYMBOLS) {
                 strncpy(declared[declared_count], lhs_name, sizeof(declared[declared_count]) - 1);
                 declared[declared_count][sizeof(declared[declared_count]) - 1] = '\0';
@@ -473,7 +491,8 @@ static void emit_ir_line_as_c(FILE *fp, const char *line, ArcanePendingArgs *pen
             if (operand[0] == '"') {
                 fprintf(fp, "    printf(\"%%s\\n\", %.*s);\n", (int)operand_len, operand);
             } else {
-                fprintf(fp, "    printf(\"%%d\\n\", %.*s);\n", (int)operand_len, operand);
+                /* Cast to double so integer and floating expressions are both printed safely. */
+                fprintf(fp, "    printf(\"%%g\\n\", (double)(%.*s));\n", (int)operand_len, operand);
             }
         }
         return;
@@ -630,6 +649,7 @@ static void emit_main_temps(FILE *fp, const ArcaneSymbolTable *symbols, const Ar
         if (is_temp_symbol(lhs_name)) {
             int seen = 0;
             int j;
+            const char *temp_type = line_has_float_math_rhs(line) ? "double" : "int";
             for (j = 0; j < declared_count; ++j) {
                 if (strcmp(declared[j], lhs_name) == 0) {
                     seen = 1;
@@ -637,7 +657,7 @@ static void emit_main_temps(FILE *fp, const ArcaneSymbolTable *symbols, const Ar
                 }
             }
             if (!seen) {
-            fprintf(fp, "    int %s;\n", lhs_name);
+                fprintf(fp, "    %s %s;\n", temp_type, lhs_name);
                 if (declared_count < ARCANE_MAX_SYMBOLS) {
                     strncpy(declared[declared_count], lhs_name, sizeof(declared[declared_count]) - 1);
                     declared[declared_count][sizeof(declared[declared_count]) - 1] = '\0';

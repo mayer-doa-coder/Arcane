@@ -3,6 +3,9 @@ HOUSE Gryffindor
 DECLARE x AS INT := 1;
 DECLARE x AS INT := 2;
 y = x + 1;
+ENDHOUSE
+
+HOUSE Hufflepuff
 IF_CHARM x + 3 THEN
 CAST z;
 END_CHARM

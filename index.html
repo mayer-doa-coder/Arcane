@@ -5,255 +5,140 @@
   <meta content="width=device-width, initial-scale=1.0" name="viewport" />
   <title>Custom Wizard Compiler | Compiler Design Project</title>
   <script src="https://cdn.tailwindcss.com"></script>
-  <link href="https://fonts.googleapis.com/css2?family=Newsreader:ital,wght@0,400;0,700;1,400;1,700&amp;family=Inter:wght@400;500;600&amp;family=Space+Grotesk:wght@400;500;700&amp;display=swap" rel="stylesheet" />
-  <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Newsreader:ital,wght@0,400;0,700;1,400;1,700&family=Inter:wght@400;500;600&family=Space+Grotesk:wght@400;500;700&display=swap" rel="stylesheet" />
   <script id="tailwind-config">
     tailwind.config = {
       darkMode: "class",
       theme: {
         extend: {
           colors: {
-            "primary": "#f2ca50",
-            "surface": "#131315",
-            "surface-soft": "#1c1b1d",
-            "surface-strong": "#2a2a2c",
+            primary: "#f2ca50",
+            "primary-container": "#d4af37",
+            surface: "#131315",
+            "surface-low": "#1c1b1d",
+            "surface-high": "#2a2a2c",
             "surface-lowest": "#0e0e10",
-            "surface-container-high": "#2a2a2c",
-            "surface-container-low": "#1c1b1d",
-            "surface-container-lowest": "#0e0e10",
             "on-surface": "#e5e1e4",
             "on-surface-variant": "#d0c5af",
-            "outline": "#99907c",
-            "primary-container": "#d4af37",
-            "outline-variant": "#4d4635",
-            "secondary": "#ffb4a9",
-            "on-primary": "#3c2f00",
-            "on-primary-container": "#554300",
-            "tertiary-container": "#8ebe98",
-            "secondary-container": "#8d160e",
-            "primary-fixed-dim": "#e9c349"
+            outline: "#4d4635",
+            secondary: "#ffb4a9",
+            success: "#8ebe98"
           },
           fontFamily: {
-            "headline": ["Newsreader"],
-            "body": ["Inter"],
-            "label": ["Space Grotesk"]
-          },
-          borderRadius: { "DEFAULT": "0.125rem", "lg": "0.25rem", "xl": "0.5rem", "full": "0.75rem" }
+            headline: ["Newsreader"],
+            body: ["Inter"],
+            label: ["Space Grotesk"]
+          }
         }
       }
-    }
+    };
   </script>
   <style>
-    .material-symbols-outlined {
-      font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
-    }
-    .rune-border {
-      border-top: 1px solid rgba(242, 202, 80, 0.2);
-      position: relative;
-    }
-    .rune-border::before {
-      content: 'ᛟ ᚦ ᚹ ᚷ ᛞ';
-      position: absolute;
-      top: -10px;
-      left: 50%;
-      transform: translateX(-50%);
-      background: #0e0e10;
-      padding: 0 10px;
-      font-family: 'Space Grotesk';
-      color: #d4af37;
-      font-size: 0.75rem;
-      letter-spacing: 0.5rem;
-    }
     body {
       background-color: #131315;
       color: #e5e1e4;
-      font-family: 'Inter', sans-serif;
+      font-family: "Inter", sans-serif;
     }
     h1, h2, h3 {
-      font-family: 'Newsreader', serif;
+      font-family: "Newsreader", serif;
+    }
+    body.panel-expanded {
+      overflow: hidden;
+    }
+    .output-panel.is-expanded {
+      position: fixed;
+      inset: 1rem;
+      z-index: 90;
+      height: calc(100vh - 2rem);
+      max-height: none !important;
+      overflow: auto;
+      border-width: 2px;
+      box-shadow: 0 20px 50px rgba(0, 0, 0, 0.55);
+    }
+    .output-panel.is-expanded pre {
+      min-height: calc(100vh - 9rem);
+      max-height: none;
+    }
+    .output-panel:fullscreen {
+      padding: 1rem;
+      background: #2a2a2c;
+      overflow: auto;
+    }
+    .output-panel:fullscreen pre {
+      min-height: calc(100vh - 9rem);
+      max-height: none;
     }
   </style>
 </head>
 <body class="selection:bg-primary/30 selection:text-primary">
-  <header class="fixed top-0 w-full z-50 flex justify-between items-center px-8 py-4 backdrop-blur-md bg-[#131315]/80">
-    <div class="text-2xl font-newsreader font-bold text-[#f2ca50] italic">Custom Wizard Compiler</div>
-    <nav class="hidden md:flex items-center space-x-8 font-label text-sm uppercase tracking-widest">
-      <a class="text-[#f2ca50] border-b-2 border-[#f2ca50] pb-1" href="#hero">Hero</a>
-      <a class="text-[#e5e1e4]/70 hover:text-[#f2ca50] transition-colors" href="#about">About</a>
-      <a class="text-[#e5e1e4]/70 hover:text-[#f2ca50] transition-colors" href="#pipeline">Phases</a>
-      <a class="text-[#e5e1e4]/70 hover:text-[#f2ca50] transition-colors" href="#houses">Houses</a>
-      <a class="text-[#e5e1e4]/70 hover:text-[#f2ca50] transition-colors" href="#code">Code</a>
-      <a class="text-[#e5e1e4]/70 hover:text-[#f2ca50] transition-colors" href="#code">Runner</a>
-    </nav>
-    <div class="flex items-center gap-4">
-      <span class="material-symbols-outlined text-[#f2ca50] cursor-pointer hover:scale-110 transition-transform">auto_fix_high</span>
+  <header class="fixed top-0 z-50 w-full border-b border-primary/15 bg-surface/90 backdrop-blur-md">
+    <div class="mx-auto flex max-w-7xl items-center justify-between px-6 py-4">
+      <div class="text-2xl font-headline font-bold italic text-primary">Custom Wizard Compiler</div>
+      <nav class="hidden items-center gap-6 font-label text-xs uppercase tracking-[0.2em] md:flex">
+        <a class="text-on-surface/70 transition-colors hover:text-primary" href="#about">About</a>
+        <a class="text-on-surface/70 transition-colors hover:text-primary" href="#pipeline">Pipeline</a>
+        <a class="text-on-surface/70 transition-colors hover:text-primary" href="#code">Runner</a>
+      </nav>
     </div>
-    <div class="bg-gradient-to-r from-transparent via-[#d4af37]/20 to-transparent h-[1px] w-full absolute bottom-0"></div>
   </header>
 
-  <section class="relative min-h-screen flex items-center justify-center overflow-hidden pt-20" id="hero">
-    <div class="absolute inset-0 z-0 bg-[radial-gradient(circle_at_top,#2a2a2c_0%,#131315_100%)]"></div>
-    <div class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[800px] h-[800px] bg-primary/5 rounded-full blur-[120px] pointer-events-none"></div>
-    <div class="relative z-10 text-center px-4 max-w-5xl">
-      <h1 class="text-6xl md:text-8xl font-headline font-bold text-on-surface tracking-tight mb-6">
-        Custom Wizard Compiler <br /><span class="text-primary italic">Compiler Design Project</span>
+  <section class="relative flex min-h-[72vh] items-center justify-center overflow-hidden px-6 pt-24" id="hero">
+    <div class="absolute inset-0 bg-[radial-gradient(circle_at_top,#2a2a2c_0%,#131315_70%)]"></div>
+    <div class="pointer-events-none absolute h-[34rem] w-[34rem] rounded-full bg-primary/8 blur-[120px]"></div>
+    <div class="relative z-10 mx-auto max-w-4xl text-center">
+      <h1 class="mb-6 text-5xl font-bold leading-tight text-on-surface md:text-7xl">
+        Custom Wizard Compiler
       </h1>
-      <p class="text-xl md:text-2xl font-body text-on-surface-variant mb-12 max-w-3xl mx-auto italic">
-        A Magical Programming Language Built with Flex &amp; Bison. From enchanted source code to optimized C output.
+      <p class="mx-auto mb-10 max-w-3xl text-lg italic text-on-surface-variant md:text-xl">
+        A compiler design project with lexer, parser, semantic checks, optimization, C code generation, and executable output.
       </p>
-      <div class="flex flex-col sm:flex-row items-center justify-center gap-6">
-        <button class="px-8 py-4 bg-primary-container text-on-primary-container font-label font-bold rounded-sm shadow-[0_0_20px_rgba(212,175,55,0.3)] hover:shadow-[0_0_40px_rgba(212,175,55,0.5)] transition-all active:scale-95">
-          EXPLORE COMPILER
-        </button>
-        <button class="px-8 py-4 border border-outline-variant text-on-surface font-label font-bold rounded-sm hover:bg-surface-container-high transition-all">
-          READ DOCUMENTATION
-        </button>
-      </div>
-    </div>
-    <div class="absolute bottom-10 left-1/2 -translate-x-1/2 text-primary animate-bounce">
-      <span class="material-symbols-outlined text-4xl">expand_more</span>
+      <a class="inline-block rounded-sm bg-primary-container px-8 py-4 font-label text-sm font-bold tracking-[0.15em] text-[#3c2f00] transition-transform hover:scale-[1.02]" href="#code">
+        OPEN RUNNER
+      </a>
     </div>
   </section>
 
-  <section class="py-32 px-8 bg-surface-container-lowest" id="about">
-    <div class="max-w-7xl mx-auto">
-      <div class="mb-20 text-center">
-        <h2 class="text-4xl md:text-5xl font-headline text-primary mb-4">About the Project</h2>
-        <p class="text-on-surface-variant font-body max-w-3xl mx-auto">
-          A compiler is a translator that converts a human-readable programming language into machine-friendly code. This project builds a wizard-themed language where magical keywords and house-inspired rules teach compiler design through a fun and practical workflow.
-        </p>
-      </div>
-      <div class="grid grid-cols-1 md:grid-cols-3 gap-12">
-        <div class="group p-8 bg-surface-container-high rounded-sm border-t-2 border-transparent hover:border-primary transition-all duration-500 shadow-xl">
-          <span class="material-symbols-outlined text-primary text-5xl mb-6 block">search</span>
-          <h3 class="text-2xl font-headline text-on-surface mb-4">Lexical Analysis</h3>
-          <p class="text-on-surface-variant leading-relaxed">Flex reads the wizard source file and converts character streams into meaningful tokens such as identifiers, numbers, operators, and magical keywords.</p>
-        </div>
-        <div class="group p-8 bg-surface-container-high rounded-sm border-t-2 border-transparent hover:border-primary transition-all duration-500 shadow-xl">
-          <span class="material-symbols-outlined text-primary text-5xl mb-6 block">schema</span>
-          <h3 class="text-2xl font-headline text-on-surface mb-4">Syntax Analysis</h3>
-          <p class="text-on-surface-variant leading-relaxed">Bison validates grammar and structure, ensuring each spell statement follows proper language rules before deeper checks begin.</p>
-        </div>
-        <div class="group p-8 bg-surface-container-high rounded-sm border-t-2 border-transparent hover:border-primary transition-all duration-500 shadow-xl">
-          <span class="material-symbols-outlined text-primary text-5xl mb-6 block">verified</span>
-          <h3 class="text-2xl font-headline text-on-surface mb-4">Semantic Analysis</h3>
-          <p class="text-on-surface-variant leading-relaxed">Symbol table and semantic rules catch misuse of declarations, types, conditions, and function arguments before code generation.</p>
-        </div>
+  <section class="bg-surface-lowest px-6 py-20" id="about">
+    <div class="mx-auto max-w-7xl">
+      <h2 class="mb-6 text-center text-4xl text-primary md:text-5xl">Project Focus</h2>
+      <p class="mx-auto mb-12 max-w-4xl text-center text-on-surface-variant">
+        This UI is focused on the core project goals: understanding compiler stages and running Wizard source code through the full pipeline.
+      </p>
+      <div class="grid grid-cols-1 gap-6 md:grid-cols-3">
+        <article class="rounded-sm border border-outline/40 bg-surface-high p-6">
+          <h3 class="mb-3 text-2xl text-on-surface">Frontend</h3>
+          <p class="text-sm text-on-surface-variant">A single-page interface to submit Wizard code and inspect output artifacts.</p>
+        </article>
+        <article class="rounded-sm border border-outline/40 bg-surface-high p-6">
+          <h3 class="mb-3 text-2xl text-on-surface">Backend</h3>
+          <p class="text-sm text-on-surface-variant">Express API endpoint that executes parser, captures diagnostics, and returns structured output.</p>
+        </article>
+        <article class="rounded-sm border border-outline/40 bg-surface-high p-6">
+          <h3 class="mb-3 text-2xl text-on-surface">Toolchain</h3>
+          <p class="text-sm text-on-surface-variant">Flex, Bison, optimizer, codegen, and C compile workflow integrated end-to-end.</p>
+        </article>
       </div>
     </div>
   </section>
 
-  <section class="py-32 px-8 bg-surface-container-lowest border-y border-outline-variant/10" id="pipeline">
-    <div class="max-w-7xl mx-auto overflow-x-auto pb-8">
-      <h2 class="text-3xl font-headline text-center text-on-surface mb-20 tracking-widest uppercase">Compiler Phases</h2>
-      <div class="flex items-center justify-between min-w-[1320px]">
-        <div class="flex flex-col items-center gap-4 group">
-          <div class="w-16 h-16 rounded-full bg-surface-container-high border border-primary/30 flex items-center justify-center text-primary transition-all group-hover:shadow-[0_0_20px_rgba(242,202,80,0.4)]">
-            <span class="material-symbols-outlined">description</span>
-          </div>
-          <span class="font-label text-xs font-bold tracking-tighter">SOURCE</span>
-        </div>
-        <div class="h-[2px] flex-grow bg-gradient-to-r from-primary/30 via-primary/10 to-primary/30 mx-4"></div>
-
-        <div class="flex flex-col items-center gap-4 group">
-          <div class="w-16 h-16 rounded-full bg-surface-container-high border border-primary/30 flex items-center justify-center text-primary transition-all group-hover:shadow-[0_0_20px_rgba(242,202,80,0.4)]">
-            <span class="material-symbols-outlined">search</span>
-          </div>
-          <span class="font-label text-xs font-bold tracking-tighter">LEXER</span>
-        </div>
-        <div class="h-[2px] flex-grow bg-gradient-to-r from-primary/30 via-primary/10 to-primary/30 mx-4"></div>
-
-        <div class="flex flex-col items-center gap-4 group">
-          <div class="w-16 h-16 rounded-full bg-surface-container-high border border-primary/30 flex items-center justify-center text-primary transition-all group-hover:shadow-[0_0_20px_rgba(242,202,80,0.4)]">
-            <span class="material-symbols-outlined">account_tree</span>
-          </div>
-          <span class="font-label text-xs font-bold tracking-tighter">PARSER</span>
-        </div>
-        <div class="h-[2px] flex-grow bg-gradient-to-r from-primary/30 via-primary/10 to-primary/30 mx-4"></div>
-
-        <div class="flex flex-col items-center gap-4 group">
-          <div class="w-16 h-16 rounded-full bg-surface-container-high border border-primary/30 flex items-center justify-center text-primary transition-all group-hover:shadow-[0_0_20px_rgba(242,202,80,0.4)]">
-            <span class="material-symbols-outlined">verified_user</span>
-          </div>
-          <span class="font-label text-xs font-bold tracking-tighter">SEMANTIC</span>
-        </div>
-        <div class="h-[2px] flex-grow bg-gradient-to-r from-primary/30 via-primary/10 to-primary/30 mx-4"></div>
-
-        <div class="flex flex-col items-center gap-4 group">
-          <div class="w-16 h-16 rounded-full bg-surface-container-high border border-primary/30 flex items-center justify-center text-primary transition-all group-hover:shadow-[0_0_20px_rgba(242,202,80,0.4)] animate-pulse">
-            <span class="material-symbols-outlined">conversion_path</span>
-          </div>
-          <span class="font-label text-xs font-bold tracking-tighter">ICG (3AC)</span>
-        </div>
-        <div class="h-[2px] flex-grow bg-gradient-to-r from-primary/30 via-primary/10 to-primary/30 mx-4"></div>
-
-        <div class="flex flex-col items-center gap-4 group">
-          <div class="w-16 h-16 rounded-full bg-surface-container-high border border-primary/30 flex items-center justify-center text-primary transition-all group-hover:shadow-[0_0_20px_rgba(242,202,80,0.4)]">
-            <span class="material-symbols-outlined">bolt</span>
-          </div>
-          <span class="font-label text-xs font-bold tracking-tighter">OPTIMIZER</span>
-        </div>
-        <div class="h-[2px] flex-grow bg-gradient-to-r from-primary/30 via-primary/10 to-primary/30 mx-4"></div>
-
-        <div class="flex flex-col items-center gap-4 group">
-          <div class="w-16 h-16 rounded-full bg-primary-container flex items-center justify-center text-on-primary-container shadow-lg">
-            <span class="material-symbols-outlined">terminal</span>
-          </div>
-          <span class="font-label text-xs font-bold tracking-tighter">CODEGEN (C)</span>
-        </div>
-      </div>
+  <section class="border-y border-outline/30 bg-surface px-6 py-20" id="pipeline">
+    <div class="mx-auto max-w-7xl">
+      <h2 class="mb-10 text-center text-4xl text-on-surface md:text-5xl">Compiler Pipeline</h2>
+      <ol class="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
+        <li class="rounded-sm border border-primary/20 bg-surface-high p-4 text-sm text-on-surface-variant">1. Wizard source input</li>
+        <li class="rounded-sm border border-primary/20 bg-surface-high p-4 text-sm text-on-surface-variant">2. Lexer and parser processing</li>
+        <li class="rounded-sm border border-primary/20 bg-surface-high p-4 text-sm text-on-surface-variant">3. Semantic checks and ICG optimization</li>
+        <li class="rounded-sm border border-primary/20 bg-surface-high p-4 text-sm text-on-surface-variant">4. C code generation and runtime output</li>
+      </ol>
     </div>
   </section>
 
-  <section class="py-32 px-8 bg-surface" id="houses">
-    <div class="max-w-7xl mx-auto">
-      <h2 class="text-4xl font-headline text-center text-primary mb-20">The Four Compiler Houses</h2>
-      <div class="grid grid-cols-1 md:grid-cols-4 gap-8">
-        <div class="bg-surface-container-high p-8 text-center border-b-4 border-primary transition-all hover:-translate-y-2">
-          <span class="material-symbols-outlined text-primary text-5xl mb-6">local_fire_department</span>
-          <h3 class="text-2xl font-headline mb-4">Gryffindor</h3>
-          <p class="text-sm font-label uppercase tracking-widest text-primary mb-4">Declarations</p>
-          <p class="text-on-surface-variant text-sm">Handles SUMMON statements, variable declarations, assignments, and value initialization.</p>
-        </div>
-
-        <div class="bg-surface-container-high p-8 text-center border-b-4 border-secondary-container transition-all hover:-translate-y-2">
-          <span class="material-symbols-outlined text-secondary-container text-5xl mb-6">psychology</span>
-          <h3 class="text-2xl font-headline mb-4">Slytherin</h3>
-          <p class="text-sm font-label uppercase tracking-widest text-secondary-container mb-4">Functions</p>
-          <p class="text-on-surface-variant text-sm">Supports POTION declarations, argument handling, return values, and reusable logic blocks.</p>
-        </div>
-
-        <div class="bg-surface-container-high p-8 text-center border-b-4 border-tertiary-container transition-all hover:-translate-y-2">
-          <span class="material-symbols-outlined text-tertiary-container text-5xl mb-6">diversity_2</span>
-          <h3 class="text-2xl font-headline mb-4">Hufflepuff</h3>
-          <p class="text-sm font-label uppercase tracking-widest text-tertiary-container mb-4">Conditions</p>
-          <p class="text-on-surface-variant text-sm">Drives IF_CHARM and OTHERWISE branching, including semantic checks for valid conditions.</p>
-        </div>
-
-        <div class="bg-surface-container-high p-8 text-center border-b-4 border-blue-400 transition-all hover:-translate-y-2">
-          <span class="material-symbols-outlined text-blue-400 text-5xl mb-6">all_inclusive</span>
-          <h3 class="text-2xl font-headline mb-4">Ravenclaw</h3>
-          <p class="text-sm font-label uppercase tracking-widest text-blue-400 mb-4">Loops</p>
-          <p class="text-on-surface-variant text-sm">Controls KEEP_CASTING loops with BREAK_SPELL and continue-like flow for iterative logic.</p>
-        </div>
-      </div>
-    </div>
-  </section>
-
-  <section class="py-32 px-8 bg-surface-container-lowest" id="code">
-    <div class="max-w-7xl mx-auto grid grid-cols-1 lg:grid-cols-2 gap-12">
-      <div class="bg-surface-container-lowest border border-outline-variant/30 shadow-2xl overflow-hidden">
-        <div class="rune-border h-8 flex items-center px-4 bg-surface-container-high">
-          <div class="flex gap-2">
-            <div class="w-3 h-3 rounded-full bg-secondary-container"></div>
-            <div class="w-3 h-3 rounded-full bg-primary-container"></div>
-            <div class="w-3 h-3 rounded-full bg-tertiary-container"></div>
-          </div>
-          <span class="mx-auto font-label text-[10px] tracking-[0.3em] text-on-surface-variant opacity-50">SPELLBOOK.WIZ</span>
-        </div>
-        <div class="p-8 font-mono text-sm leading-relaxed overflow-x-auto min-h-[420px]">
-          <p class="text-on-surface-variant mb-4 opacity-50">// Write your wizard code and cast Run Compiler</p>
-          <textarea id="wizard-code" class="w-full min-h-[320px] bg-surface-container-high border border-outline-variant/40 rounded-sm p-4 text-on-surface text-sm font-mono focus:border-primary focus:ring-primary" spellcheck="false">ENTER_HOGWARTS
+  <section class="bg-surface-lowest px-6 py-20" id="code">
+    <div class="mx-auto grid max-w-7xl grid-cols-1 gap-10 lg:grid-cols-2">
+      <div class="rounded-sm border border-outline/40 bg-surface-low p-6">
+        <h2 class="mb-4 text-3xl text-on-surface">Wizard Source</h2>
+        <p class="mb-4 text-sm text-on-surface-variant">Write code and run the compiler pipeline.</p>
+        <textarea id="wizard-code" class="min-h-[320px] w-full rounded-sm border border-outline/50 bg-surface-high p-4 font-mono text-sm text-on-surface focus:border-primary focus:outline-none" spellcheck="false">ENTER_HOGWARTS
 GRYFFINDOR HOUSE
 SUMMON power : INT := 5;
 SUMMON bonus : INT := 4;
@@ -261,84 +146,79 @@ SUMMON total : INT := power + bonus;
 PROPHECY(total);
 ENDHOUSE
 EXIT_HOGWARTS</textarea>
-          <div class="mt-4 flex flex-wrap items-center gap-4">
-            <button id="run-compiler" class="px-6 py-3 bg-primary-container text-on-primary-container font-label font-bold rounded-sm shadow-[0_0_20px_rgba(212,175,55,0.3)] hover:shadow-[0_0_35px_rgba(212,175,55,0.45)] transition-all active:scale-95">RUN COMPILER</button>
-            <label class="flex items-center gap-2 text-on-surface-variant text-xs font-label tracking-wider">
-              <input id="include-tokens" type="checkbox" class="rounded border-outline-variant/50 bg-surface-container-high text-primary focus:ring-primary" />
-              INCLUDE TOKENS
-            </label>
-            <span id="run-status" class="text-xs text-on-surface-variant font-label tracking-wider">Ready</span>
-          </div>
+        <div class="mt-4 flex flex-wrap items-center gap-4">
+          <button id="run-compiler" class="rounded-sm bg-primary-container px-6 py-3 font-label text-xs font-bold tracking-[0.15em] text-[#3c2f00] transition hover:brightness-110">RUN COMPILER</button>
+          <label class="flex items-center gap-2 text-xs text-on-surface-variant">
+            <input id="include-tokens" type="checkbox" class="rounded border-outline/60 bg-surface-high text-primary focus:ring-primary" />
+            INCLUDE TOKENS
+          </label>
+          <span id="run-status" class="font-label text-xs uppercase tracking-[0.15em] text-on-surface-variant">Ready</span>
         </div>
       </div>
 
-      <div class="flex flex-col justify-center gap-4">
-        <div class="inline-flex items-center gap-2 px-4 py-2 bg-primary/10 text-primary border border-primary/20 rounded-full w-fit mb-8 font-label text-xs tracking-widest">
-          <span class="material-symbols-outlined text-sm">auto_awesome</span>
-          COMPILATION OUTPUT
-        </div>
-        <h2 class="text-4xl font-headline text-on-surface mb-6">Intermediate Code and Generated C</h2>
-        <p class="text-on-surface-variant mb-2 leading-relaxed">Run code to see each stage: errors, 3AC, optimized code, generated C, and final output.</p>
+      <div class="space-y-4">
+        <h2 class="text-3xl text-on-surface">Compilation Output</h2>
+        <p class="text-sm text-on-surface-variant">Errors, raw/optimized ICG, generated C, runtime output, and optional tokens.</p>
 
-        <div class="bg-surface-container-high p-4 font-mono text-xs border-l-2 border-secondary-container max-h-28 overflow-auto">
-          <p class="text-on-surface-variant/50 mb-2"># Errors</p>
+        <div id="panel-errors" class="output-panel max-h-28 overflow-auto rounded-sm border-l-2 border-secondary bg-surface-high p-4 font-mono text-xs">
+          <div class="mb-2 flex items-center justify-between gap-3">
+            <p class="text-on-surface-variant/60">Errors</p>
+            <button type="button" data-panel-target="panel-errors" class="rounded border border-outline/60 px-2 py-1 text-[10px] uppercase tracking-wide text-on-surface-variant transition hover:border-primary hover:text-primary">Maximize</button>
+          </div>
           <pre id="errors-output" class="whitespace-pre-wrap text-secondary">No errors</pre>
         </div>
 
-        <div class="bg-surface-container-high p-4 font-mono text-xs border-l-2 border-primary max-h-28 overflow-auto">
-          <p class="text-on-surface-variant/50 mb-2"># Intermediate Code (3AC)</p>
+        <div id="panel-icg" class="output-panel max-h-28 overflow-auto rounded-sm border-l-2 border-primary bg-surface-high p-4 font-mono text-xs">
+          <div class="mb-2 flex items-center justify-between gap-3">
+            <p class="text-on-surface-variant/60">Intermediate Code (3AC)</p>
+            <button type="button" data-panel-target="panel-icg" class="rounded border border-outline/60 px-2 py-1 text-[10px] uppercase tracking-wide text-on-surface-variant transition hover:border-primary hover:text-primary">Maximize</button>
+          </div>
           <pre id="icg-output" class="whitespace-pre-wrap text-on-surface">(run compiler to view)</pre>
         </div>
 
-        <div class="bg-surface-container-high p-4 font-mono text-xs border-l-2 border-primary-fixed-dim max-h-28 overflow-auto">
-          <p class="text-on-surface-variant/50 mb-2"># Optimized Code</p>
+        <div id="panel-optimized" class="output-panel max-h-28 overflow-auto rounded-sm border-l-2 border-success bg-surface-high p-4 font-mono text-xs">
+          <div class="mb-2 flex items-center justify-between gap-3">
+            <p class="text-on-surface-variant/60">Optimized Code</p>
+            <button type="button" data-panel-target="panel-optimized" class="rounded border border-outline/60 px-2 py-1 text-[10px] uppercase tracking-wide text-on-surface-variant transition hover:border-primary hover:text-primary">Maximize</button>
+          </div>
           <pre id="optimized-output" class="whitespace-pre-wrap text-on-surface">(run compiler to view)</pre>
         </div>
 
-        <div class="bg-surface-container-high p-4 font-mono text-xs border-l-2 border-tertiary-container max-h-28 overflow-auto">
-          <p class="text-on-surface-variant/50 mb-2">/* Generated C output */</p>
+        <div id="panel-c" class="output-panel max-h-28 overflow-auto rounded-sm border-l-2 border-primary-container bg-surface-high p-4 font-mono text-xs">
+          <div class="mb-2 flex items-center justify-between gap-3">
+            <p class="text-on-surface-variant/60">Generated C</p>
+            <button type="button" data-panel-target="panel-c" class="rounded border border-outline/60 px-2 py-1 text-[10px] uppercase tracking-wide text-on-surface-variant transition hover:border-primary hover:text-primary">Maximize</button>
+          </div>
           <pre id="c-output" class="whitespace-pre-wrap text-on-surface">(run compiler to view)</pre>
         </div>
 
-        <div class="bg-surface-container-high p-4 font-mono text-xs border-l-2 border-blue-400 max-h-28 overflow-auto">
-          <p class="text-on-surface-variant/50 mb-2"># Final Program Output</p>
+        <div id="panel-runtime" class="output-panel max-h-28 overflow-auto rounded-sm border-l-2 border-blue-400 bg-surface-high p-4 font-mono text-xs">
+          <div class="mb-2 flex items-center justify-between gap-3">
+            <p class="text-on-surface-variant/60">Final Program Output</p>
+            <button type="button" data-panel-target="panel-runtime" class="rounded border border-outline/60 px-2 py-1 text-[10px] uppercase tracking-wide text-on-surface-variant transition hover:border-primary hover:text-primary">Maximize</button>
+          </div>
           <pre id="runtime-output" class="whitespace-pre-wrap text-blue-300">(run compiler to view)</pre>
         </div>
 
-        <div class="bg-surface-container-high p-4 font-mono text-xs border-l-2 border-outline max-h-28 overflow-auto">
-          <p class="text-on-surface-variant/50 mb-2"># Tokens (optional)</p>
+        <div id="panel-tokens" class="output-panel max-h-28 overflow-auto rounded-sm border-l-2 border-outline bg-surface-high p-4 font-mono text-xs">
+          <div class="mb-2 flex items-center justify-between gap-3">
+            <p class="text-on-surface-variant/60">Tokens (optional)</p>
+            <button type="button" data-panel-target="panel-tokens" class="rounded border border-outline/60 px-2 py-1 text-[10px] uppercase tracking-wide text-on-surface-variant transition hover:border-primary hover:text-primary">Maximize</button>
+          </div>
           <pre id="tokens-output" class="whitespace-pre-wrap text-on-surface-variant">(enable INCLUDE TOKENS)</pre>
         </div>
       </div>
     </div>
   </section>
 
-  <footer class="bg-[#0e0e10] border-t border-[#d4af37]/10 py-12 px-8">
-    <div class="max-w-7xl mx-auto flex flex-col md:flex-row justify-between items-center gap-8">
-      <div class="flex flex-col items-center md:items-start">
-        <div class="font-newsreader text-[#f2ca50] text-2xl font-bold mb-2">Custom Wizard Compiler</div>
-        <p class="font-inter text-sm tracking-wide text-[#e5e1e4]/50 text-center md:text-left">Built by Your Name<br />Compiler Design Project using Flex, Bison, and C Code Generation.</p>
-      </div>
-      <nav class="flex gap-8 font-inter text-sm tracking-wide">
-        <a class="text-[#e5e1e4]/50 hover:text-[#f2ca50] transition-colors hover:-translate-y-0.5 duration-300" href="https://github.com/your-username/custom-wizard-compiler" target="_blank" rel="noreferrer">GitHub</a>
-        <a class="text-[#e5e1e4]/50 hover:text-[#f2ca50] transition-colors hover:-translate-y-0.5 duration-300" href="#about">Project</a>
-        <a class="text-[#e5e1e4]/50 hover:text-[#f2ca50] transition-colors hover:-translate-y-0.5 duration-300" href="#pipeline">Phases</a>
-        <a class="text-[#e5e1e4]/50 hover:text-[#f2ca50] transition-colors hover:-translate-y-0.5 duration-300" href="#code">Runner</a>
-      </nav>
-      <div class="flex gap-4">
-        <div class="w-10 h-10 bg-surface-container-high flex items-center justify-center rounded-sm hover:text-primary transition-colors cursor-pointer">
-          <span class="material-symbols-outlined text-lg">code</span>
-        </div>
-        <div class="w-10 h-10 bg-surface-container-high flex items-center justify-center rounded-sm hover:text-primary transition-colors cursor-pointer">
-          <span class="material-symbols-outlined text-lg">terminal</span>
-        </div>
-      </div>
+  <footer class="border-t border-primary/15 bg-surface-lowest px-6 py-10">
+    <div class="mx-auto max-w-7xl text-center text-sm text-on-surface-variant">
+      Custom Wizard Compiler | Compiler Design Project (Flex, Bison, Optimizer, Codegen)
     </div>
   </footer>
+
   <script>
-    const apiBase = window.location.protocol === "file:"
-      ? "http://localhost:4000"
-      : window.location.origin;
+    const apiBase = window.location.protocol === "file:" ? "http://localhost:4000" : window.location.origin;
     const runButton = document.getElementById("run-compiler");
     const codeInput = document.getElementById("wizard-code");
     const includeTokens = document.getElementById("include-tokens");
@@ -350,11 +230,13 @@ EXIT_HOGWARTS</textarea>
     const cOutput = document.getElementById("c-output");
     const runtimeOutput = document.getElementById("runtime-output");
     const tokensOutput = document.getElementById("tokens-output");
+    const panelToggleButtons = Array.from(document.querySelectorAll("[data-panel-target]"));
+    let fallbackExpandedPanel = null;
 
     function setLoading(isLoading) {
       runButton.disabled = isLoading;
       runButton.classList.toggle("opacity-70", isLoading);
-      runStatus.textContent = isLoading ? "Casting Spell..." : "Ready";
+      runStatus.textContent = isLoading ? "Running" : "Ready";
     }
 
     function renderErrors(errors, stderr) {
@@ -362,9 +244,81 @@ EXIT_HOGWARTS</textarea>
         errorsOutput.textContent = errors.map((e) => e.message).join("\n");
         return;
       }
-
       errorsOutput.textContent = stderr ? stderr : "No errors";
     }
+
+    function updatePanelToggleLabels() {
+      panelToggleButtons.forEach((button) => {
+        const panel = document.getElementById(button.dataset.panelTarget);
+        const isExpanded = (document.fullscreenElement === panel) || panel?.classList.contains("is-expanded");
+        button.textContent = isExpanded ? "Minimize" : "Maximize";
+      });
+    }
+
+    function closeFallbackExpandedPanel() {
+      if (!fallbackExpandedPanel) {
+        return;
+      }
+      fallbackExpandedPanel.classList.remove("is-expanded");
+      fallbackExpandedPanel = null;
+      document.body.classList.remove("panel-expanded");
+    }
+
+    async function togglePanelExpand(panel) {
+      if (!panel) {
+        return;
+      }
+
+      const canUseFullscreen = typeof panel.requestFullscreen === "function" && typeof document.exitFullscreen === "function";
+      if (canUseFullscreen) {
+        if (document.fullscreenElement === panel) {
+          await document.exitFullscreen();
+          updatePanelToggleLabels();
+          return;
+        }
+
+        if (document.fullscreenElement) {
+          await document.exitFullscreen();
+        }
+
+        closeFallbackExpandedPanel();
+
+        try {
+          await panel.requestFullscreen();
+        } catch {
+          panel.classList.add("is-expanded");
+          fallbackExpandedPanel = panel;
+          document.body.classList.add("panel-expanded");
+        }
+        updatePanelToggleLabels();
+        return;
+      }
+
+      if (panel.classList.contains("is-expanded")) {
+        closeFallbackExpandedPanel();
+      } else {
+        closeFallbackExpandedPanel();
+        panel.classList.add("is-expanded");
+        fallbackExpandedPanel = panel;
+        document.body.classList.add("panel-expanded");
+      }
+      updatePanelToggleLabels();
+    }
+
+    panelToggleButtons.forEach((button) => {
+      button.addEventListener("click", async () => {
+        const panel = document.getElementById(button.dataset.panelTarget);
+        await togglePanelExpand(panel);
+      });
+    });
+
+    document.addEventListener("fullscreenchange", updatePanelToggleLabels);
+    document.addEventListener("keydown", (event) => {
+      if (event.key === "Escape" && fallbackExpandedPanel) {
+        closeFallbackExpandedPanel();
+        updatePanelToggleLabels();
+      }
+    });
 
     runButton.addEventListener("click", async () => {
       setLoading(true);
@@ -388,18 +342,14 @@ EXIT_HOGWARTS</textarea>
         icgOutput.textContent = data.intermediate_code || "(no intermediate code)";
         optimizedOutput.textContent = data.optimized_code || "(no optimized code)";
         cOutput.textContent = data.generated_c_code || "(no generated C code)";
-
-        if (data.execution_error) {
-          runtimeOutput.textContent = `Runtime/Compile Error:\n${data.execution_error}`;
-        } else {
-          runtimeOutput.textContent = data.execution_output || "(no runtime output)";
-        }
-
+        runtimeOutput.textContent = data.execution_error
+          ? `Runtime/Compile Error:\n${data.execution_error}`
+          : (data.execution_output || "(no runtime output)");
         tokensOutput.textContent = includeTokens.checked
           ? (data.tokens || "(no token output)")
           : "(enable INCLUDE TOKENS)";
 
-        runStatus.textContent = data.success ? "Spell Completed" : "Spell Failed";
+        runStatus.textContent = data.success ? "Success" : "Failed";
       } catch (err) {
         errorsOutput.textContent = `Request failed: ${err.message}`;
         runStatus.textContent = "Backend not reachable";
