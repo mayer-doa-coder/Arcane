@@ -14,28 +14,25 @@ ENTER_HOGWARTS HOUSE
         CAST("Empower spell started");
         PROPHECY("score=", score);
 
-        CHECK(score > 0) THEN
+        IF_CHARM(score > 0) THEN
             DECLARE raised AS INT := score + 5;
             RETURN raised;
-        ENDCHECK
-
-        ELSE HOUSE
+        OTHERWISE
             RETURN 0;
-        ENDHOUSE
+        END_CHARM
     ENDSPELL
 
-    Ravenclaw LOOP(score > 0) DO
+    Ravenclaw TIME_TURNER(score > 0) BEGIN_LOOP
         score = score - 1;
 
-        IF score == 5 HOUSE
+        IF_CHARM score == 5 THEN
             CAST("Halfway reached");
-            CONTINUE;
-        FI
-
-        IF score == 2 HOUSE
-            BREAK;
-        FI
-    ENDLOOP
+            KEEP_CASTING;
+END_CHARM
+        IF_CHARM score == 2 THEN
+            BREAK_SPELL;
+END_CHARM
+    END_TIME_TURNER
 
     POTION HOUSE
         DECLARE p AS FLOAT := POWER(2);

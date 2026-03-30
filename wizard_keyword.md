@@ -1,13 +1,13 @@
-# 🧙‍♂️ Wizard Language Keywords (Final 64)
+# Wizard Language Keywords (Final 64)
 
-## 🔮 Program Structure
+## Program Structure
 1. ENTER_HOGWARTS        → main() {
 2. EXIT_HOGWARTS         → }
 
 3. HOUSE                 → {
 4. ENDHOUSE              → }
 
-## 🏰 House Roles (Semantic Use)
+## House Roles (Semantic Use)
 5. Gryffindor            → Declaration Block
 6. Slytherin             → Function Block
 7. Hufflepuff            → Condition Block
@@ -15,7 +15,7 @@
 
 ---
 
-## 📦 Data Types
+## Data Types
 9. INT                   → int
 10. FLOAT                → float
 11. DOUBLE               → double
@@ -26,7 +26,7 @@
 
 ---
 
-## 🧾 Declaration & Assignment
+## Declaration & Assignment
 16. DECLARE              → type variable =
 17. AS                   → (type binding keyword)
 18. =                    → =
@@ -34,7 +34,7 @@
 
 ---
 
-## 🔁 Control Flow
+## Control Flow
 20. IF                   → if
 21. FI                   → }
 22. ELSE                 → else
@@ -44,7 +44,7 @@
 
 ---
 
-## 🔄 Loops (Ravenclaw)
+## Loops (Ravenclaw)
 26. LOOP                 → while
 27. DO                   → {
 28. ENDLOOP              → }
@@ -53,7 +53,7 @@
 
 ---
 
-## 🐍 Functions (Slytherin)
+## Functions (Slytherin)
 31. SPELL                → function definition
 32. ENDSPELL             → }
 33. SUMMON               → function call
@@ -62,20 +62,20 @@
 
 ---
 
-## ✨ Input / Output
+## Input / Output
 36. CAST                 → printf()
 37. PROPHECY             → printf (formatted output)
 38. INPUT                → scanf()
 
 ---
 
-## 🧪 Scope Management
+## Scope Management
 39. POTION               → {
 40. ENDPOTION            → }
 
 ---
 
-## 🎩 Semantic Validation
+## Semantic Validation
 41. SORTING_HAT          → semantic_check()
 42. ENDHAT               → end semantic block
 43. CHECK_TYPES          → type checking
@@ -83,7 +83,7 @@
 
 ---
 
-## ➕ Arithmetic Operators
+## Arithmetic Operators
 45. +                    → +
 46. -                    → -
 47. *                    → *
@@ -92,7 +92,7 @@
 
 ---
 
-## 🔗 Logical Operators
+## Logical Operators
 50. AND                  → &&
 51. OR                   → ||
 52. NOT                  → !
@@ -100,7 +100,7 @@
 
 ---
 
-## 📐 Math Functions
+## Math Functions
 54. POWO                 → pow()
 55. RADIX                → sqrt()
 56. FLOORUS              → floor()
@@ -113,6 +113,6 @@
 
 ---
 
-## 🔢 Tokens
+## Tokens
 63. IDENTIFIER           → [a-zA-Z_][a-zA-Z0-9_]*
 64. NUMBER               → [0-9]+

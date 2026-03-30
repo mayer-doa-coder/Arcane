@@ -15,6 +15,10 @@
 #include "../parser/wizard.tab.h"
 #endif
 
+#ifndef USE_FLEX_LEXER
+YYSTYPE yylval;
+#endif
+
 int comment_depth = 0;
 extern int yylineno;
 int current_column = 1;
@@ -130,18 +134,17 @@ OCTAL           0[0-7]+
 "AS"                        { return AS; }
 ":="                        { return INIT_ASSIGN; }
 
-"IF"                        { return IF; }
-"FI"                        { return FI; }
-"ELSE"                      { return ELSE; }
-"CHECK"                     { return CHECK; }
+"IF_CHARM"                  { return IF_CHARM; }
+"OTHERWISE"                 { return OTHERWISE; }
+"ELSE_CHARM"                { return ELSE_CHARM; }
 "THEN"                      { return THEN; }
-"ENDCHECK"                  { return ENDCHECK; }
+"END_CHARM"                 { return END_CHARM; }
 
-"LOOP"                      { return LOOP; }
-"DO"                        { return DO; }
-"ENDLOOP"                   { return ENDLOOP; }
-"BREAK"                     { return BREAK; }
-"CONTINUE"                  { return CONTINUE; }
+"TIME_TURNER"               { return TIME_TURNER; }
+"BEGIN_LOOP"                { return BEGIN_LOOP; }
+"END_TIME_TURNER"           { return END_TIME_TURNER; }
+"BREAK_SPELL"               { return BREAK_SPELL; }
+"KEEP_CASTING"              { return KEEP_CASTING; }
 
 "SPELL"                     { return SPELL; }
 "ENDSPELL"                  { return ENDSPELL; }

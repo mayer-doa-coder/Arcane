@@ -1,9 +1,9 @@
 ENTER_HOGWARTS
 HOUSE Gryffindor
 DECLARE score AS INT := 7;
-CHECK score > 5 THEN
+IF_CHARM score > 5 THEN
 score = score + 3;
-ENDCHECK
+END_CHARM
 CAST score;
 ENDHOUSE
 EXIT_HOGWARTS

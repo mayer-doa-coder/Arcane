@@ -28,6 +28,9 @@ ArcaneICG g_icg;
 char *loop_start_stack[64];
 char *loop_end_stack[64];
 int loop_stack_top = -1;
+char *if_false_stack[64];
+char *if_end_stack[64];
+int if_stack_top = -1;
 static char *emit_binary_temp(const char *op, char *left, char *right);
 
 #ifndef ARCANE_PARSER_SEM_TYPES_DEFINED
@@ -872,8 +875,8 @@ typedef struct {
 %token GRYFFINDOR SLYTHERIN HUFFLEPUFF RAVENCLAW
 %token INT FLOAT DOUBLE LONG CHAR BOOL VOID
 %token DECLARE AS INIT_ASSIGN
-%token IF FI ELSE CHECK THEN ENDCHECK
-%token LOOP DO ENDLOOP BREAK CONTINUE
+%token IF_CHARM OTHERWISE ELSE_CHARM THEN END_CHARM
+%token TIME_TURNER BEGIN_LOOP END_TIME_TURNER BREAK_SPELL KEEP_CASTING
 %token SPELL ENDSPELL SUMMON WITH RETURN
 %token CAST PROPHECY INPUT
 %token POTION ENDPOTION SORTING_HAT ENDHAT CHECK_TYPES CHECK_DECLARATIONS
@@ -888,7 +891,6 @@ typedef struct {
 %type <expr> init_opt expr expression expression_opt
 %type <args> arg_list_opt arg_list
 %type <params> param_list_opt param_list param_decl
-%type <sval> check_prefix
 
 %left OR XOR
 %left AND
@@ -907,6 +909,7 @@ program:
 		icg_init(&g_icg, stdout);
 		icg_reset(&g_icg);
 		loop_stack_top = -1;
+		if_stack_top = -1;
 		current_scope_level = 0;
 		current_function_name[0] = '\0';
 		sync_symbol_context();
@@ -915,8 +918,13 @@ program:
 	house_blocks EXIT_HOGWARTS
 	{
 		icg_emit(&g_icg, "# ICG END\n");
-		optimizer_run_all(&g_icg);
+		printf("=== RAW_ICG_START ===\n");
 		print_icg(&g_icg, stdout);
+		printf("=== RAW_ICG_END ===\n");
+		optimizer_run_all(&g_icg);
+		printf("=== OPT_ICG_START ===\n");
+		print_icg(&g_icg, stdout);
+		printf("=== OPT_ICG_END ===\n");
 		if (generate_c_code(&g_arcane_symbol_table, &g_icg, "../output/output.c") != 0) {
 			fprintf(stderr, "Code generation warning: failed to write output C file\n");
 		}
@@ -952,7 +960,7 @@ function_house_block:
 ;
 
 ravenclaw_loop_block:
-	RAVENCLAW LOOP expr DO statements ENDLOOP
+	RAVENCLAW TIME_TURNER expr BEGIN_LOOP statements END_TIME_TURNER
 ;
 
 potion_block:
@@ -1245,56 +1253,81 @@ call:
 ;
 
 if_stmt:
-	IF expression
-	{
-		char *end_label = icg_new_label(&g_icg);
-		if ($2.type != ARCANE_TYPE_BOOL || !$2.valid) {
-			report_semantic_errorf("Condition must be boolean");
-		}
-		icg_emit_if_false(&g_icg, $2.place ? $2.place : "0", end_label);
-		free($2.place);
-		$<sval>$ = end_label;
-	}
-	HOUSE statements FI
-	{
-		icg_emit_label(&g_icg, $<sval>3);
-		free($<sval>3);
-	}
-	| check_prefix THEN statements ENDCHECK
-	{
-		icg_emit_label(&g_icg, $1);
-		free($1);
-	}
-	| check_prefix THEN statements ELSE
-	{
-		char *end_label = icg_new_label(&g_icg);
-		icg_emit_goto(&g_icg, end_label);
-		icg_emit_label(&g_icg, $1);
-		free($1);
-		$<sval>$ = end_label;
-	}
-	statements ENDCHECK
-	{
-		icg_emit_label(&g_icg, $<sval>5);
-		free($<sval>5);
-	}
-;
-
-check_prefix:
-	CHECK expr
+	IF_CHARM expr
 	{
 		char *false_label = icg_new_label(&g_icg);
+		char *end_label = icg_new_label(&g_icg);
 		if ($2.type != ARCANE_TYPE_BOOL || !$2.valid) {
 			report_semantic_errorf("Condition must be boolean");
 		}
 		icg_emit_if_false(&g_icg, $2.place ? $2.place : "0", false_label);
+		if (if_stack_top < 63) {
+			if_stack_top++;
+			if_false_stack[if_stack_top] = false_label;
+			if_end_stack[if_stack_top] = end_label;
+		} else {
+			free(false_label);
+			free(end_label);
+			report_semantic_errorf("Nested IF_CHARM depth exceeded");
+		}
 		free($2.place);
-		$$ = false_label;
 	}
+	THEN statements if_else_part END_CHARM
+;
+
+if_else_part:
+	{
+		if (if_stack_top >= 0) {
+			icg_emit_label(&g_icg, if_false_stack[if_stack_top]);
+			icg_emit_label(&g_icg, if_end_stack[if_stack_top]);
+			free(if_false_stack[if_stack_top]);
+			free(if_end_stack[if_stack_top]);
+			if_stack_top--;
+		}
+	}
+	| OTHERWISE
+	{
+		if (if_stack_top >= 0) {
+			icg_emit_goto(&g_icg, if_end_stack[if_stack_top]);
+			icg_emit_label(&g_icg, if_false_stack[if_stack_top]);
+			free(if_false_stack[if_stack_top]);
+			if_false_stack[if_stack_top] = NULL;
+		}
+	}
+	statements
+	{
+		if (if_stack_top >= 0) {
+			icg_emit_label(&g_icg, if_end_stack[if_stack_top]);
+			free(if_end_stack[if_stack_top]);
+			if_end_stack[if_stack_top] = NULL;
+			if_stack_top--;
+		}
+	}
+	| ELSE_CHARM
+	{
+		char *false_label = icg_new_label(&g_icg);
+		if (if_stack_top >= 0) {
+			icg_emit_goto(&g_icg, if_end_stack[if_stack_top]);
+			icg_emit_label(&g_icg, if_false_stack[if_stack_top]);
+			free(if_false_stack[if_stack_top]);
+			if_false_stack[if_stack_top] = false_label;
+		}
+	}
+	expr
+	{
+		if ($3.type != ARCANE_TYPE_BOOL || !$3.valid) {
+			report_semantic_errorf("Condition must be boolean");
+		}
+		if (if_stack_top >= 0 && if_false_stack[if_stack_top]) {
+			icg_emit_if_false(&g_icg, $3.place ? $3.place : "0", if_false_stack[if_stack_top]);
+		}
+		free($3.place);
+	}
+	THEN statements if_else_part
 ;
 
 loop_stmt:
-	LOOP
+	TIME_TURNER
 	{
 		char *loop_start = icg_new_label(&g_icg);
 		char *loop_end = icg_new_label(&g_icg);
@@ -1305,7 +1338,7 @@ loop_stmt:
 			icg_emit_label(&g_icg, loop_start);
 		}
 	}
-	expr DO
+	expr BEGIN_LOOP
 	{
 		if ($3.type != ARCANE_TYPE_BOOL || !$3.valid) {
 			report_semantic_errorf("Condition must be boolean");
@@ -1315,7 +1348,7 @@ loop_stmt:
 		}
 		free($3.place);
 	}
-	statements ENDLOOP
+	statements END_TIME_TURNER
 	{
 		if (loop_stack_top >= 0) {
 			icg_emit_goto(&g_icg, loop_start_stack[loop_stack_top]);
@@ -1328,23 +1361,23 @@ loop_stmt:
 ;
 
 break_stmt:
-	BREAK ';'
+	BREAK_SPELL ';'
 	{
 		if (loop_stack_top >= 0) {
 			icg_emit_goto(&g_icg, loop_end_stack[loop_stack_top]);
 		} else {
-			report_semantic_errorf("'BREAK' used outside loop");
+			report_semantic_errorf("'BREAK_SPELL' used outside loop");
 		}
 	}
 ;
 
 continue_stmt:
-	CONTINUE ';'
+	KEEP_CASTING ';'
 	{
 		if (loop_stack_top >= 0) {
 			icg_emit_goto(&g_icg, loop_start_stack[loop_stack_top]);
 		} else {
-			report_semantic_errorf("'CONTINUE' used outside loop");
+			report_semantic_errorf("'KEEP_CASTING' used outside loop");
 		}
 	}
 ;
@@ -1626,7 +1659,7 @@ expression:
 
 void yyerror(const char *s) {
 	if (s && strcmp(s, "syntax error") == 0) {
-		fprintf(stderr, "Parse error: syntax error (possible misplaced ELSE or missing ENDCHECK/FI)\n");
+		fprintf(stderr, "Parse error: syntax error (possible misplaced OTHERWISE/ELSE_CHARM or missing END_CHARM)\n");
 		return;
 	}
 	fprintf(stderr, "Parse error: %s\n", s ? s : "unknown parser error");
@@ -1667,17 +1700,16 @@ static int scan_identifier_or_keyword(int first) {
 	if (strcmp(buffer, WZ_KW_VOID) == 0) return VOID;
 	if (strcmp(buffer, WZ_KW_DECLARE) == 0) return DECLARE;
 	if (strcmp(buffer, WZ_KW_AS) == 0) return AS;
-	if (strcmp(buffer, WZ_KW_IF) == 0) return IF;
-	if (strcmp(buffer, WZ_KW_FI) == 0) return FI;
-	if (strcmp(buffer, WZ_KW_ELSE) == 0) return ELSE;
-	if (strcmp(buffer, WZ_KW_CHECK) == 0) return CHECK;
+	if (strcmp(buffer, WZ_KW_IF_CHARM) == 0) return IF_CHARM;
+	if (strcmp(buffer, WZ_KW_OTHERWISE) == 0) return OTHERWISE;
+	if (strcmp(buffer, WZ_KW_ELSE_CHARM) == 0) return ELSE_CHARM;
 	if (strcmp(buffer, WZ_KW_THEN) == 0) return THEN;
-	if (strcmp(buffer, WZ_KW_ENDCHECK) == 0) return ENDCHECK;
-	if (strcmp(buffer, WZ_KW_LOOP) == 0) return LOOP;
-	if (strcmp(buffer, WZ_KW_DO) == 0) return DO;
-	if (strcmp(buffer, WZ_KW_ENDLOOP) == 0) return ENDLOOP;
-	if (strcmp(buffer, WZ_KW_BREAK) == 0) return BREAK;
-	if (strcmp(buffer, WZ_KW_CONTINUE) == 0) return CONTINUE;
+	if (strcmp(buffer, WZ_KW_END_CHARM) == 0) return END_CHARM;
+	if (strcmp(buffer, WZ_KW_TIME_TURNER) == 0) return TIME_TURNER;
+	if (strcmp(buffer, WZ_KW_BEGIN_LOOP) == 0) return BEGIN_LOOP;
+	if (strcmp(buffer, WZ_KW_END_TIME_TURNER) == 0) return END_TIME_TURNER;
+	if (strcmp(buffer, WZ_KW_BREAK_SPELL) == 0) return BREAK_SPELL;
+	if (strcmp(buffer, WZ_KW_KEEP_CASTING) == 0) return KEEP_CASTING;
 	if (strcmp(buffer, WZ_KW_SPELL) == 0) return SPELL;
 	if (strcmp(buffer, WZ_KW_ENDSPELL) == 0) return ENDSPELL;
 	if (strcmp(buffer, WZ_KW_SUMMON) == 0) return SUMMON;

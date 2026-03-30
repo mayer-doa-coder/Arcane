@@ -12,18 +12,18 @@ SPELL houseReady HOUSE
 ENDSPELL
 
 HOUSE Hufflepuff
-CHECK a < limit THEN
+IF_CHARM a < limit THEN
 CAST a;
-ENDCHECK
+END_CHARM
 ENDHOUSE
 
 HOUSE Ravenclaw
-LOOP b < limit DO
+TIME_TURNER b < limit BEGIN_LOOP
 CAST b;
 next = a + b;
 a = b;
 b = next;
-ENDLOOP
+END_TIME_TURNER
 ENDHOUSE
 
 EXIT_HOGWARTS

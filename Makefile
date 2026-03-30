@@ -2,8 +2,8 @@
 # Wizard64 Edition
 
 # Compiler and tools
-LEX = C:/MinGW/msys/1.0/bin/flex.exe
-BISON = C:/MinGW/msys/1.0/bin/bison.exe
+LEX = flex
+BISON = bison
 CC = gcc
 CXX = g++
 RM = rm -f

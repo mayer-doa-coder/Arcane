@@ -10,17 +10,16 @@ max = max * b;
 max = max - a;
 max = max / a;
 
-CHECK max > b THEN
+IF_CHARM max > b THEN
 max = max + 1;
-ENDCHECK
+END_CHARM
 
-IF a < b HOUSE
+IF_CHARM a < b THEN
 max = max + b;
-FI
-
-LOOP cnt < 3 DO
+END_CHARM
+TIME_TURNER cnt < 3 BEGIN_LOOP
 cnt = cnt + 1;
-ENDLOOP
+END_TIME_TURNER
 
 ENDHOUSE
 EXIT_HOGWARTS
